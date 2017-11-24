@@ -209,41 +209,48 @@ function assignPossiblyNested(dest: any, src: any, attrib: string) {
 
 function auditFromUpdate(docUpdate: any, options: any, next: any) {
     const queryObject = docUpdate;
+    const queryOp = queryObject.op;
     queryObject.find(queryObject._conditions, function (err: any, results: any) {
         if (err) {
             return next(err);
         } else {
+            let original: any;
+            let updated: any;
             async.eachSeries(results, function (currentObject: any, callback) {
-                let original: any = {};
-                let updated: any = {};
-                Object.keys(queryObject._update).forEach(key => {
-                    Object.keys(queryObject._update[key]).forEach(attrib => {
-                        if (key === '$set') {
-                            assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
-                        }
-                        assignPossiblyNested(original, currentObject, attrib);
-                    });
-                    switch (key) {
-                        case '$set':
-                            // ignore $set - already dealt with
-                            break;
-                        case '$push':
-                            Object.keys(queryObject._update[key]).forEach(attrib => {
-                                updated[attrib] = [];
-                                Object.assign(updated[attrib], original[attrib]);
-                                updated[attrib].push(queryObject._update[key][attrib])
-                            });
-                            break;
-                        default:
-                            let errMessage = 'No audit trail support for ' + key;
-                            if (auditOptions.errorHandler) {
-                                auditOptions.errorHandler(errMessage);
-                            } else {
-                                console.error(errMessage)
+                updated = {};
+                if (queryOp === 'findOneAndRemove') {
+                    original = currentObject;
+                } else {
+                    original = {};
+                    Object.keys(queryObject._update).forEach(key => {
+                        Object.keys(queryObject._update[key]).forEach(attrib => {
+                            if (key === '$set') {
+                                assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
                             }
-                            break;
-                    }
-                });
+                            assignPossiblyNested(original, currentObject, attrib);
+                        });
+                        switch (key) {
+                            case '$set':
+                                // ignore $set - already dealt with
+                                break;
+                            case '$push':
+                                Object.keys(queryObject._update[key]).forEach(attrib => {
+                                    updated[attrib] = [];
+                                    Object.assign(updated[attrib], original[attrib]);
+                                    updated[attrib].push(queryObject._update[key][attrib])
+                                });
+                                break;
+                            default:
+                                let errMessage = 'No audit trail support for ' + key;
+                                if (auditOptions.errorHandler) {
+                                    auditOptions.errorHandler(errMessage);
+                                } else {
+                                    console.error(errMessage)
+                                }
+                                break;
+                        }
+                    });
+                }
                 auditFromObject(currentObject, original, updated, options, function() {
                     callback();
                 });
@@ -326,7 +333,6 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             next()
         } else {
             try {
-                console.log('In update');
                 getHiddenFields(this.mongooseCollection.collectionName, options);
                 auditFromUpdate(this, options, next);
             } catch(e) {
