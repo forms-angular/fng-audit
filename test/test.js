@@ -60,39 +60,9 @@ describe('Object cleaning', function () {
         assert.isUndefined(obj2.loseMe);
     });
 });
-describe.only('Error handling', function () {
-    it('calls an error handler', function (done) {
-        var handledErr = null;
-        fngAudit.controller({
-            mongoose: mongoose,
-            app: {
-                get: function () {
-                }
-            },
-            getResourceFromCollection: function () {
-                return {
-                    resourceName: 'test',
-                    model: Test,
-                    options: {}
-                };
-            }
-        }, null, { errorHandler: function (err) {
-                handledErr = err;
-            }
-        });
-        Test.create([{ aString: 'Original' }], function (err, test) {
-            if (err) {
-                throw err;
-            }
-            Test.findByIdAndUpdate(test[0]._id, { $rename: { aString: 'NewVal' } }, function () {
-                assert.equal(handledErr, 'No audit trail support for $rename');
-                done();
-            });
-        });
-    });
-});
 describe('Mongoose Plugin', function () {
-    beforeEach('clear down the test database', function (done) {
+    var handledErr;
+    before('set up the audit plugin', function () {
         fngAudit.controller({
             mongoose: mongoose,
             app: {
@@ -110,7 +80,12 @@ describe('Mongoose Plugin', function () {
                 var timestamp = id.toString().substring(0, 8);
                 return new Date(parseInt(timestamp, 16) * 1000);
             }
+        }, null, { errorHandler: function (err) {
+                handledErr = err.toString();
+            }
         });
+    });
+    beforeEach('clear down the test database', function (done) {
         Promise.all([
             Test.remove({}),
             fngAudit.Audit.remove({})
@@ -119,7 +94,23 @@ describe('Mongoose Plugin', function () {
             done();
         });
     });
-    describe('Document save and re-save', function () {
+    describe('Error handling', function () {
+        it('calls an error handler', function (done) {
+            Test.create([{ aString: 'Original' }], function (err, test) {
+                if (err) {
+                    throw err;
+                }
+                Test.findByIdAndUpdate(test[0]._id, { $rename: { aString: 'NewVal' } }, function (err) {
+                    if (err) {
+                        throw err;
+                    }
+                    assert.equal(handledErr, 'No audit trail support for $rename');
+                    done();
+                });
+            });
+        });
+    });
+    describe('save', function () {
         var orig, modified;
         beforeEach(function (done) {
             orig = { aString: 'Original', aNumber: 1 };
@@ -167,7 +158,7 @@ describe('Mongoose Plugin', function () {
             });
         });
     });
-    describe('Document save and update', function () {
+    describe('findOneAndUpdate', function () {
         var orig;
         beforeEach(function (done) {
             orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
@@ -205,6 +196,52 @@ describe('Mongoose Plugin', function () {
                 done();
             });
         });
+    });
+    describe('remove', function () {
+        var orig;
+        beforeEach(function (done) {
+            orig = { aString: 'Original', aNumber: 1 };
+            Test.create([orig], function (err, test) {
+                if (err) {
+                    throw err;
+                }
+                orig = test[0].toObject();
+                delete orig.__v;
+                test[0].remove(function (err) {
+                    if (err) {
+                        throw err;
+                    }
+                    done();
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.count({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
+    describe('update', function () {
+        it('creates an audit record');
+    });
+    describe('findOneAndRemove', function () {
+        it('creates an audit record');
     });
 });
 //# sourceMappingURL=test.js.map

@@ -96,7 +96,7 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
                     console.error(err);
                     return callback(err, null);
                 }
-                let object = latest ? latest : {};
+                let object = latest ? latest : {_id: Mongoose.Types.ObjectId(id)};
                 async.each(histories, function(history, eachCallback){
                     jsondiffpatch.unpatch(object, history.chg);
                     eachCallback();
@@ -265,34 +265,24 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     options = options || {};
     options.strip = options.strip || [];
 
-    schema.pre("findOneAndUpdate", function (next: any) {
-        if (this.isNew || this.__noAudit) {
-            next();
-        } else {
-            getHiddenFields(this.mongooseCollection.collectionName, options);
-            auditFromUpdate(this, options, next);
-        }
-    });
-
+    /*
+            Document middleware.  "this" is the document
+     */
     schema.pre("save", function (next: any) {
         if (this.isNew || this.__noAudit) {
             next();
         } else {
             let that = this;
-            getHiddenFields(that.constructor.collection.collectionName, options);
-            that.constructor.findOne({_id: that._id}, function(err: any, original: any) {
-                auditFromObject(that, original, that, options, next);
-            });
-        }
-    });
-
-    schema.pre("update", function (next: any) {
-        if (this.__noAudit) {
-            next()
-        } else {
-            console.log('In update');
-            getHiddenFields(this.mongooseCollection.collectionName, options);
-            auditFromUpdate(this, options, next);
+            try {
+                getHiddenFields(that.constructor.collection.collectionName, options);
+                that.constructor.findOne({_id: that._id}, function(err: any, original: any) {
+                    auditFromObject(that, original, that, options, next);
+                });
+            } catch(e) {
+                if (auditOptions.errorHandler) {
+                    auditOptions.errorHandler(e.message);
+                }
+            }
         }
     });
 
@@ -300,10 +290,66 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         if (this.__noAudit) {
             next()
         } else {
-            let that = this;
-            console.log('In remove');
-            getHiddenFields(that.constructor.collection.collectionName, options);
-            auditFromObject(that, that, {}, options, next);
+            try {
+                let that = this;
+                getHiddenFields(that.constructor.collection.collectionName, options);
+                auditFromObject(that, that, {}, options, next);
+            } catch(e) {
+                if (auditOptions.errorHandler) {
+                    auditOptions.errorHandler(e.message);
+                }
+            }
+        }
+    });
+
+    /*
+            Query middleware.  "this" is the query
+     */
+
+    schema.pre("findOneAndUpdate", function (next: any) {
+        if (this.isNew || this.__noAudit) {
+            next();
+        } else {
+            try {
+                getHiddenFields(this.mongooseCollection.collectionName, options);
+                auditFromUpdate(this, options, next);
+            } catch(e) {
+                if (auditOptions.errorHandler) {
+                    auditOptions.errorHandler(e.message);
+                }
+            }
+        }
+    });
+
+    schema.pre("update", function (next: any) {
+        if (this.__noAudit) {
+            next()
+        } else {
+            try {
+                console.log('In update');
+                getHiddenFields(this.mongooseCollection.collectionName, options);
+                auditFromUpdate(this, options, next);
+            } catch(e) {
+                if (auditOptions.errorHandler) {
+                    auditOptions.errorHandler(e.message);
+                }
+            }
+
+        }
+    });
+
+    schema.pre("findOneAndRemove", function (next: any) {
+        if (this.isNew || this.__noAudit) {
+            next();
+        } else {
+            try {
+                getHiddenFields(this.mongooseCollection.collectionName, options);
+                auditFromUpdate(this, options, next);
+            } catch(e) {
+                if (auditOptions.errorHandler) {
+                    auditOptions.errorHandler(e.message);
+                }
+            }
         }
     });
 

@@ -75,44 +75,11 @@ describe('Object cleaning', function () {
 
 });
 
-describe.only('Error handling', function() {
-
-    it ('calls an error handler', function(done) {
-        let handledErr: string = null;
-        fngAudit.controller({
-            mongoose: mongoose,
-            app: {
-                get: function () {
-                }
-            },
-            getResourceFromCollection: function() {
-                return {
-                    resourceName: 'test',
-                    model: Test,
-                    options: {}
-                }
-            }
-        }, null,{errorHandler: function(err: string) {
-            handledErr = err;
-            }
-        });
-        Test.create([{aString: 'Original'}], function (err: any, test: mongoose.Document[]) {
-            if (err) {
-                throw err
-            }
-            Test.findByIdAndUpdate(test[0]._id, {$rename:{aString:'NewVal'}}, function () {
-                assert.equal(handledErr, 'No audit trail support for $rename');
-                done();
-            })
-        });
-
-    })
-
-});
-
 describe('Mongoose Plugin', function () {
 
-    beforeEach('clear down the test database', function (done) {
+    let handledErr: string;
+
+    before('set up the audit plugin', function () {
         fngAudit.controller({
             mongoose: mongoose,
             app: {
@@ -130,17 +97,39 @@ describe('Mongoose Plugin', function () {
                 let timestamp = id.toString().substring(0, 8);
                 return new Date(parseInt(timestamp, 16) * 1000);
             }
+        }, null,{errorHandler: function(err: string) {
+                handledErr = err.toString();
+            }
         });
+    });
+
+    beforeEach('clear down the test database', function (done) {
         Promise.all([
             Test.remove({}),
             fngAudit.Audit.remove({})
         ])
-        .then(() => {
-            done()
+            .then(() => {
+                done()
+            });
+    });
+
+    describe('Error handling', function() {
+
+        it ('calls an error handler', function(done) {
+            Test.create([{aString: 'Original'}], function (err: any, test: mongoose.Document[]) {
+                if (err) {
+                    throw err
+                }
+                Test.findByIdAndUpdate(test[0]._id, {$rename:{aString:'NewVal'}}, function (err: any) {
+                    if (err) {throw err}
+                    assert.equal(handledErr, 'No audit trail support for $rename');
+                    done();
+                })
+            });
         });
     });
 
-    describe('Document save and re-save', function () {
+    describe('save', function () {
 
         let orig: any, modified: any;
 
@@ -196,7 +185,7 @@ describe('Mongoose Plugin', function () {
 
     });
 
-    describe('Document save and update', function () {
+    describe('findOneAndUpdate', function () {
 
         let orig: any;
 
@@ -238,6 +227,65 @@ describe('Mongoose Plugin', function () {
             })
         });
 
+
+    });
+
+    describe('remove', function() {
+
+        let orig: any;
+
+        beforeEach(function (done) {
+            orig = {aString: 'Original', aNumber: 1};
+            Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                if (err) {
+                    throw err
+                }
+                orig = test[0].toObject();
+                delete orig.__v;
+                test[0].remove(function (err) {
+                    if (err) {
+                        throw err
+                    }
+                    done();
+                })
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.count({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function(done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function(err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
+
+    });
+
+    describe('update', function() {
+
+        it('creates an audit record');
+
+    });
+
+    describe('findOneAndRemove', function() {
+
+        it('creates an audit record');
 
     });
 
