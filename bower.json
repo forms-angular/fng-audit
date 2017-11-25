@@ -1,0 +1,23 @@
+{
+  "name": "fng-audit",
+  "description": "Client part of forms-angular audit plugin",
+  "main": "./dist/fng-audit.js",
+  "authors": [
+    "Mark Chapman <mark.chapman@gmail.com>"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "forms-angular",
+    "mongoose",
+    "audit",
+    "history"
+  ],
+  "homepage": "https://www.forms-angular.org/#/plugins",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}

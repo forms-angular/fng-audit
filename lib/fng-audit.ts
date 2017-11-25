@@ -2,6 +2,7 @@
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
+import {DiffPatcher} from "jsondiffpatch";
 
 interface AuditOptions {
     debug?: Boolean;
@@ -37,23 +38,30 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         Audit = mongooseInstance.model(modelName, auditSchema);
     }
 
-    fng.app.get('/:model/:id/history', function (req: any, res: any) {
-        res.status(200).send('Hello');
-    });
 
-    fng.app.get('/:model/:id/snapshot/:date', function (req: any, res: any) {
-        res.status(200).send('Hello');
-    });
-
-    fng.app.get('/:model/:id/version/:version', function (req: any, res: any) {
-        getVersion(fng.getResource(req.params.model), req.params.id, req.params.version, function(err: any, obj: any) {
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
+        getAuditTrail(req.params.model, req.params.id, function(err:any, results:any) {
             if (err) {
-                res.status(404).send(err)
+                res.status(400).send(err);
             } else {
-                res.status(200).send(obj);
+                res.status(200).send(results);
             }
-        });
-    });
+        })
+    }]));
+
+    // fng.app.get('/:model/:id/snapshot/:date', function (req: any, res: any) {
+    //     res.status(200).send('Hello');
+    // });
+    //
+    // fng.app.get('/:model/:id/version/:version', function (req: any, res: any) {
+    //     getVersion(fng.getResource(req.params.model), req.params.id, req.params.version, function(err: any, obj: any) {
+    //         if (err) {
+    //             res.status(404).send(err)
+    //         } else {
+    //             res.status(200).send(obj);
+    //         }
+    //     });
+    // });
 }
 
 export function getAuditTrail(modelName: string, id: string, callback: any) {
@@ -97,8 +105,8 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
                     return callback(err, null);
                 }
                 let object = latest ? latest : {_id: Mongoose.Types.ObjectId(id)};
-                async.each(histories, function(history, eachCallback){
-                    jsondiffpatch.unpatch(object, history.chg);
+                async.each(histories, function(history: any, eachCallback){
+                    (<any>jsondiffpatch).unpatch(object, history.chg);
                     eachCallback();
                 }, function(err){
                     if (err) {
@@ -152,7 +160,9 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
     let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
     let suppressedChanges = ['updatedAt','__v'];
     ['strip','hidden'].forEach((prop) => {
-        if ((<any>options)[prop] && (<any>options)[prop].length > 0) {suppressedChanges.push((<any>options)[prop])}
+        if ((<any>options)[prop] && (<any>options)[prop].length > 0) {
+            suppressedChanges = suppressedChanges.concat((<any>options)[prop]);
+        }
     });
     suppressedChanges.forEach(attrib => {
         stripAttribFromObject(attrib, stdOrig);

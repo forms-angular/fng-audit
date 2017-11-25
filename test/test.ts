@@ -2,7 +2,7 @@ import * as chai from "chai";
 
 import * as mongoose from 'mongoose';
 
-let fngAudit = require("../fng-audit");
+let fngAudit = require("../lib/fng-audit");
 
 let assert = chai.assert;
 
@@ -97,7 +97,7 @@ describe('Mongoose Plugin', function () {
                 let timestamp = id.toString().substring(0, 8);
                 return new Date(parseInt(timestamp, 16) * 1000);
             }
-        }, null,{errorHandler: function(err: string) {
+        }, function(array: Array<any>) {return array},{errorHandler: function(err: string) {
                 handledErr = err.toString();
             }
         });

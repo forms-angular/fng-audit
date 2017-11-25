@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 var chai = require("chai");
 var mongoose = require("mongoose");
-var fngAudit = require("../fng-audit");
+var fngAudit = require("../lib/fng-audit");
 var assert = chai.assert;
 mongoose.connect("mongodb://localhost:27017/fng_audit_test", { useMongoClient: true });
 mongoose.Promise = global.Promise;
@@ -80,7 +80,7 @@ describe('Mongoose Plugin', function () {
                 var timestamp = id.toString().substring(0, 8);
                 return new Date(parseInt(timestamp, 16) * 1000);
             }
-        }, null, { errorHandler: function (err) {
+        }, function (array) { return array; }, { errorHandler: function (err) {
                 handledErr = err.toString();
             }
         });
@@ -317,4 +317,3 @@ describe('Mongoose Plugin', function () {
         });
     });
 });
-//# sourceMappingURL=test.js.map
