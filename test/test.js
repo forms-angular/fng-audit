@@ -59,6 +59,20 @@ describe('Object cleaning', function () {
         var obj2 = fngAudit.clean(obj);
         assert.isUndefined(obj2.loseMe);
     });
+    it('works with example a', function () {
+        var obj = {
+            "_id": "5a1c67283238582fc7e90db3",
+            "aString": "Original",
+            "aNumber": 1,
+            "__v": 0,
+            "strings": []
+        };
+        assert.deepEqual({
+            "_id": "5a1c67283238582fc7e90db3",
+            "aString": "Original",
+            "aNumber": 1,
+        }, fngAudit.clean(obj));
+    });
 });
 describe('Mongoose Plugin', function () {
     var handledErr;
@@ -146,7 +160,7 @@ describe('Mongoose Plugin', function () {
         it('returns version 0', function (done) {
             fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
                 assert.isNull(err);
-                assert.deepEqual(obj.toObject(), orig);
+                assert.deepEqual(obj, fngAudit.clean(orig));
                 done();
             });
         });
@@ -192,7 +206,7 @@ describe('Mongoose Plugin', function () {
         it('returns version 0', function (done) {
             fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
                 assert.isNull(err);
-                assert.deepEqual(fngAudit.clean(obj.toObject()), fngAudit.clean(orig));
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
                 done();
             });
         });
@@ -271,7 +285,7 @@ describe('Mongoose Plugin', function () {
         it('returns version 0', function (done) {
             fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
                 assert.isNull(err);
-                assert.deepEqual(obj.toObject(), orig);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
                 done();
             });
         });

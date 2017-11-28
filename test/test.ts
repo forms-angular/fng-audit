@@ -73,6 +73,21 @@ describe('Object cleaning', function () {
         assert.isUndefined(obj2.loseMe);
     });
 
+    it('works with example a', function() {
+        let obj: any = {
+            "_id": "5a1c67283238582fc7e90db3",
+            "aString": "Original",
+            "aNumber": 1,
+            "__v": 0,
+            "strings": []
+        };
+        assert.deepEqual({
+            "_id": "5a1c67283238582fc7e90db3",
+            "aString": "Original",
+            "aNumber": 1,
+        }, fngAudit.clean(obj))
+    });
+
 });
 
 describe('Mongoose Plugin', function () {
@@ -170,7 +185,7 @@ describe('Mongoose Plugin', function () {
         it('returns version 0', function(done) {
             fngAudit.getVersion(Test, orig._id.toString(), '0', function(err: any, obj: any) {
                 assert.isNull(err);
-                assert.deepEqual(obj.toObject(), orig);
+                assert.deepEqual(obj, fngAudit.clean(orig));
                 done();
             })
         });
@@ -222,7 +237,7 @@ describe('Mongoose Plugin', function () {
         it('returns version 0', function(done) {
             fngAudit.getVersion(Test, orig._id.toString(), '0', function(err: any, obj: any) {
                 assert.isNull(err);
-                assert.deepEqual(fngAudit.clean(obj.toObject()), fngAudit.clean(orig));
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
                 done();
             })
         });
@@ -316,7 +331,7 @@ describe('Mongoose Plugin', function () {
         it('returns version 0', function(done) {
             fngAudit.getVersion(Test, orig._id.toString(), '0', function(err: any, obj: any) {
                 assert.isNull(err);
-                assert.deepEqual(obj.toObject(), orig);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
                 done();
             })
         });

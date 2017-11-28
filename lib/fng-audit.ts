@@ -27,7 +27,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         c: String,   //collection
         cId: {type: Mongoose.Schema.Types.ObjectId},
         chg: {},
-        // user: {},  // First of req.user._id, req.user (presumably populated by authentication middleware), req.headers['x-forwarded-for'] or req.connection.remoteAddress
+        user: {},  // Taken from _user
         ver: Number
     });
 
@@ -53,15 +53,54 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     //     res.status(200).send('Hello');
     // });
     //
-    // fng.app.get('/:model/:id/version/:version', function (req: any, res: any) {
-    //     getVersion(fng.getResource(req.params.model), req.params.id, req.params.version, function(err: any, obj: any) {
-    //         if (err) {
-    //             res.status(404).send(err)
-    //         } else {
-    //             res.status(200).send(obj);
-    //         }
-    //     });
-    // });
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', function (req: any, res: any) {
+        getVersion(fng.getResource(req.params.model).model, req.params.id, req.params.version, function(err: any, obj: any) {
+            if (err) {
+                res.status(404).send(err)
+            } else {
+                res.status(200).send(obj);
+            }
+        });
+    }]));
+}
+
+function stripAttribFromObject(attrib: string, object: any) {
+    let cur = object;
+    let tree = attrib.split('.');
+    let last = tree.pop();
+    tree.forEach(branch => {if (cur) { cur = cur[branch]}});
+    if (cur) {delete cur[last]}
+}
+
+export function clean(obj: any, delFunc?: any): any {
+
+    delFunc = delFunc || function(obj: any, key: any) {delete obj[key]};
+
+    for (let key in obj) {
+        if (key === '__v') {
+            delFunc(obj, key);
+        } else {
+            if (obj.hasOwnProperty(key) && typeof obj[key] === "object") {
+                if (Array.isArray(obj[key])) {
+                    if (obj[key].length === 0) {
+                        delFunc(obj, key);
+                    } else {
+                        obj[key].forEach((elm: any, index: number) => {
+                            obj[key][index] = clean(obj[key][index], delFunc);
+                        });
+                    }
+                } else {
+                    let cleaned = clean(obj[key], delFunc);
+                    if (cleaned && Object.keys(cleaned).length > 0) {
+                        obj[key] = cleaned;
+                    } else {
+                        delFunc(obj, key);
+                    }
+                }
+            }
+        }
+    }
+    return obj;
 }
 
 export function getAuditTrail(modelName: string, id: string, callback: any) {
@@ -104,7 +143,7 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
                     console.error(err);
                     return callback(err, null);
                 }
-                let object = latest ? latest : {_id: Mongoose.Types.ObjectId(id)};
+                let object = latest ? latest.toObject() : {_id: Mongoose.Types.ObjectId(id)};
                 async.each(histories, function(history: any, eachCallback){
                     (<any>jsondiffpatch).unpatch(object, history.chg);
                     eachCallback();
@@ -113,45 +152,10 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
                         console.error(err);
                         return callback(err, null);
                     }
-                    callback(null, object);
+                    callback(null, clean(object));
                 });
             })
     });
-}
-
-function stripAttribFromObject(attrib: string, object: any) {
-    let cur = object;
-    let tree = attrib.split('.');
-    let last = tree.pop();
-    tree.forEach(branch => {if (cur) { cur = cur[branch]}});
-    if (cur) {delete cur[last]}
-}
-
-export function clean(obj: any, delFunc?: any): any {
-
-    delFunc = delFunc || function(obj: any, key: any) {delete obj[key]};
-
-    for (let key in obj) {
-        if (obj.hasOwnProperty(key) && typeof obj[key] === "object") {
-            if (Array.isArray(obj[key])) {
-                if (obj[key].length === 0) {
-                    delFunc(obj, key);
-                } else {
-                    obj[key].forEach((elm: any, index: number) => {
-                        obj[key][index] = clean(obj[key][index], delFunc);
-                    });
-                }
-            } else {
-                let cleaned = clean(obj[key], delFunc);
-                if (Object.keys(cleaned).length > 0) {
-                    obj[key] = cleaned;
-                } else {
-                    delFunc(obj, key);
-                }
-            }
-        }
-    }
-    return obj;
 }
 
 function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
@@ -174,13 +178,19 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
         let cId = doc._id;
         Audit.findOne({c: c, cId: cId}).sort("-ver").exec(function (err:any, prevAudit:any) {
             // Audit.findOne({c: c, cId: cId}, function (err:any, prevAudit:any) {
-            if (err) { return next(err); }
-            Audit.create({
+            if (err) {
+                return next(err);
+            }
+            let auditRec: any = {
                 c: c,
                 cId: cId,
                 ver: prevAudit ? prevAudit.ver + 1 : 0,
                 chg: chg
-            }, next);
+            };
+            if (updated._user) {
+                auditRec.user = updated._user._id || updated._user;
+            }
+            Audit.create(auditRec, next);
         });
     } else {
         next();

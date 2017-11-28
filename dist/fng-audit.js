@@ -2,22 +2,48 @@
 (function () {
     'use strict';
     var auditModule = angular.module('fngAuditModule', ['formsAngular']);
-    auditModule.config(['routingServiceProvider', function (routingService) {
+    auditModule
+        .config(['routingServiceProvider', function (routingService) {
             routingService.addRoutes(null, [
                 { route: '/:model/:id/history', state: 'model::history', templateUrl: 'templates/base-history.html' },
+                { route: '/:model/:id/version/:version', state: 'model::version', templateUrl: 'templates/base-version.html' }
             ]);
+            routingService.registerAction('history');
+            routingService.registerAction('version');
         }])
-        .controller('FngAuditCtrl', ['$scope', '$location', 'routingService', 'fngAuditServ',
-        function ($scope, $location, routingService, fngAuditServ) {
-            console.log(JSON.stringify(routingService.parsePathFunc()($location.$$path), null, 2));
+        .controller('FngAuditHistCtrl', ['$scope', '$location', 'routingService', 'fngAuditServ', function ($scope, $location, routingService, fngAuditServ) {
+            $scope.changes = [];
             angular.extend($scope, routingService.parsePathFunc()($location.$$path));
-            // fngAuditServ.getHist($location.param)
-        }
-    ])
+            fngAuditServ.getHist($scope.modelName, $scope.id)
+                .then(function (results) {
+                $scope.changes = results.data;
+            }, function (err) {
+                console.log(err);
+            });
+            $scope.buildHistUrl = function (change) {
+                return routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion);
+            };
+        }])
+        .controller('FngAuditVerCtrl', ['$scope', '$location', 'routingService', 'fngAuditServ', function ($scope, $location, routingService, fngAuditServ) {
+            $scope.record = [];
+            angular.extend($scope, routingService.parsePathFunc()($location.$$path));
+            fngAuditServ.getVersion($scope.modelName, $scope.id, $scope.tab)
+                .then(function (results) {
+                $scope.version = results.data;
+            }, function (err) {
+                console.log(err);
+            });
+            $scope.buildHistUrl = function (change) {
+                return routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion);
+            };
+        }])
         .service('fngAuditServ', function ($http) {
         return {
             getHist: function (modelName, id) {
                 return $http.get('/api/' + modelName + '/' + id + '/history');
+            },
+            getVersion: function (modelName, id, version) {
+                return $http.get('/api/' + modelName + '/' + id + '/version/' + version);
             }
         };
     });
@@ -27,7 +53,14 @@ angular.module('fngAuditModule').run(['$templateCache', function($templateCache)
   'use strict';
 
   $templateCache.put('templates/base-history.html',
-    "<h1 ng-controller=FngAuditCtrl>History!!</h1>"
+    "<div ng-controller=FngAuditHistCtrl><div ng-class=\"css('rowFluid')\" class=\"page-header list-header\"><div class=header-lhs><h1>History for {{modelName}} {{id}}</h1></div></div><div class=\"page-body list-body\"><error-display></error-display><div ng-class=\"css('rowFluid')\"><a ng-repeat=\"change in changes\" ng-href={{buildHistUrl(change)}}><div class=list-item><div ng-class=\"css('span',12)\">{{ change.comment }} {{ change.changedAt }}</div></div></a></div></div></div>"
+  );
+
+
+  $templateCache.put('templates/base-version.html',
+    "<div ng-controller=FngAuditVerCtrl><div ng-class=\"css('rowFluid')\" class=\"page-header list-header\"><div class=header-lhs><h1>Version {{ tab }} for {{modelName}} {{id}}</h1></div></div><div class=\"page-body list-body\"><error-display></error-display><div ng-class=\"css('rowFluid')\"><pre>\n" +
+    "                {{ version | json }}\n" +
+    "            </pre></div></div></div>"
   );
 
 }]);

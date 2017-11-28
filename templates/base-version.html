@@ -1,0 +1,17 @@
+<div ng-controller="FngAuditVerCtrl">
+    <div ng-class="css('rowFluid')" class="page-header list-header">
+        <div class="header-lhs">
+            <h1 >Version {{ tab }} for {{modelName}} {{id}}</h1>
+        </div>
+    </div>
+
+    <div class="page-body list-body">
+        <error-display></error-display>
+        <div ng-class="css('rowFluid')">
+            <pre>
+                {{ version | json }}
+            </pre>
+        </div>
+    </div>
+</div>
+
