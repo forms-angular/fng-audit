@@ -28,6 +28,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         cId: {type: Mongoose.Schema.Types.ObjectId},
         chg: {},
         user: {},  // Taken from _user
+        op: String,  // Taken from _op - what operation is being performed?
         ver: Number
     });
 
@@ -159,6 +160,22 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
 }
 
 function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
+
+    function getPseudoField(name: string): any {
+        let retVal;
+        if (updated['_' + name]) {
+            retVal = updated['_' + name]._id || updated['_' + name];
+        } else if (orig['_' + name]) {
+            retVal = orig['_' + name]._id || orig['_' + name];
+        } else if (orig['__' + name]) {
+            retVal = orig['__' + name]._id || orig['__' + name];
+            delete orig['__' + name];
+        }
+        return retVal;
+    }
+
+    let user: any = getPseudoField('user');
+    let op: any = getPseudoField('op');
     // Remove the stuff you never want to audit
     let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
     let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
@@ -177,7 +194,6 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
         let c: string = (<any>doc.constructor).modelName;
         let cId = doc._id;
         Audit.findOne({c: c, cId: cId}).sort("-ver").exec(function (err:any, prevAudit:any) {
-            // Audit.findOne({c: c, cId: cId}, function (err:any, prevAudit:any) {
             if (err) {
                 return next(err);
             }
@@ -187,9 +203,8 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                 ver: prevAudit ? prevAudit.ver + 1 : 0,
                 chg: chg
             };
-            if (updated._user) {
-                auditRec.user = updated._user._id || updated._user;
-            }
+            if (user) {auditRec.user = user; }
+            if (op) {auditRec.op = op; }
             Audit.create(auditRec, next);
         });
     } else {
@@ -242,6 +257,8 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                     original = currentObject;
                 } else {
                     original = {};
+                    if (queryObject.options && queryObject.options._user) {original.__user = queryObject.options._user;}
+                    if (queryObject.options && queryObject.options._op) {original.__op = queryObject.options._op;}
                     Object.keys(queryObject._update).forEach(key => {
                         Object.keys(queryObject._update[key]).forEach(attrib => {
                             if (key === '$set') {
@@ -296,7 +313,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             Document middleware.  "this" is the document
      */
     schema.pre("save", function (next: any) {
-        if (this.isNew || this.__noAudit) {
+        if (this.isNew || this._noAudit) {
             next();
         } else {
             let that = this;
@@ -309,12 +326,13 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
+                next();
             }
         }
     });
 
     schema.pre("remove", function(next: any) {
-        if (this.__noAudit) {
+        if (this._noAudit) {
             next()
         } else {
             try {
@@ -325,6 +343,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
+                next();
             }
         }
     });
@@ -334,7 +353,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
      */
 
     schema.pre("findOneAndUpdate", function (next: any) {
-        if (this.isNew || this.__noAudit) {
+        if (this.options._noAudit) {
             next();
         } else {
             try {
@@ -344,12 +363,13 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
+                next();
             }
         }
     });
 
     schema.pre("update", function (next: any) {
-        if (this.__noAudit) {
+        if (this.options._noAudit) {
             next()
         } else {
             try {
@@ -359,13 +379,14 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
+                next();
             }
 
         }
     });
 
     schema.pre("findOneAndRemove", function (next: any) {
-        if (this.isNew || this.__noAudit) {
+        if (this.options._noAudit) {
             next();
         } else {
             try {
@@ -375,6 +396,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
+                next();
             }
         }
     });
