@@ -48,7 +48,7 @@
             }
 
         }])
-        .service('fngAuditServ', function($http : any) {
+        .service('fngAuditServ', ['$http', function($http : any) {
             return {
                 getHist: function(modelName: string, id: string) {
                     return $http.get('/api/' + modelName + '/' + id + '/history');
@@ -57,7 +57,7 @@
                     return $http.get('/api/' + modelName + '/' + id + '/version/' + version);
                 }
             }
-        });
+        }]);
 
 })();
 

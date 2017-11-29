@@ -37,14 +37,14 @@
                 return routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion);
             };
         }])
-        .service('fngAuditServ', function ($http) {
-        return {
-            getHist: function (modelName, id) {
-                return $http.get('/api/' + modelName + '/' + id + '/history');
-            },
-            getVersion: function (modelName, id, version) {
-                return $http.get('/api/' + modelName + '/' + id + '/version/' + version);
-            }
-        };
-    });
+        .service('fngAuditServ', ['$http', function ($http) {
+            return {
+                getHist: function (modelName, id) {
+                    return $http.get('/api/' + modelName + '/' + id + '/history');
+                },
+                getVersion: function (modelName, id, version) {
+                    return $http.get('/api/' + modelName + '/' + id + '/version/' + version);
+                }
+            };
+        }]);
 })();
