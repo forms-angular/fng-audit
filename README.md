@@ -42,7 +42,11 @@ Behaviour of the plugin can be modified by adding pseudo fields to the document 
 
 ### On the client side:
 
-The following routes are added:
+    <script src="fng-audit/dist/fng-audit.js"></script>
+
+Add **fngAuditModule** to your app's list of services.
+
+The following client side routes are added:
 
 `/<model>/<id>/history` displays a screen showing all the audited updates to a document
 `/<model>/<id>/version/<version>` recreates the value of the specified version of the item and displays it in JSON format
