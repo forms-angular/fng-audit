@@ -211,6 +211,45 @@ describe('Mongoose Plugin', function () {
             });
         });
     });
+    describe('findOneAndUpdate - using an object or new vals', function () {
+        var orig;
+        beforeEach(function (done) {
+            orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
+            Test.create([orig], function (err, test) {
+                if (err) {
+                    throw err;
+                }
+                orig = test[0].toObject();
+                Test.findByIdAndUpdate(test[0]._id, { aString: 'NewVal' }, function (err) {
+                    if (err) {
+                        throw err;
+                    }
+                    done();
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.count({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
     describe('remove', function () {
         var orig;
         beforeEach(function (done) {

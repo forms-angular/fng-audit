@@ -260,31 +260,37 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                     if (queryObject.options && queryObject.options._user) {original.__user = queryObject.options._user;}
                     if (queryObject.options && queryObject.options._op) {original.__op = queryObject.options._op;}
                     Object.keys(queryObject._update).forEach(key => {
-                        Object.keys(queryObject._update[key]).forEach(attrib => {
-                            if (key === '$set') {
-                                assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
-                            }
-                            assignPossiblyNested(original, currentObject, attrib);
-                        });
-                        switch (key) {
-                            case '$set':
-                                // ignore $set - already dealt with
-                                break;
-                            case '$push':
-                                Object.keys(queryObject._update[key]).forEach(attrib => {
-                                    updated[attrib] = [];
-                                    Object.assign(updated[attrib], original[attrib]);
-                                    updated[attrib].push(queryObject._update[key][attrib])
-                                });
-                                break;
-                            default:
-                                let errMessage = 'No audit trail support for ' + key;
-                                if (auditOptions.errorHandler) {
-                                    auditOptions.errorHandler(errMessage);
-                                } else {
-                                    console.error(errMessage)
+                        if (key[0] === '$') {
+                            Object.keys(queryObject._update[key]).forEach(attrib => {
+                                if (key === '$set') {
+                                    assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
                                 }
-                                break;
+                                assignPossiblyNested(original, currentObject, attrib);
+                            });
+                            switch (key) {
+                                case '$set':
+                                    // ignore $set - already dealt with
+                                    break;
+                                case '$push':
+                                    Object.keys(queryObject._update[key]).forEach(attrib => {
+                                        updated[attrib] = [];
+                                        Object.assign(updated[attrib], original[attrib]);
+                                        updated[attrib].push(queryObject._update[key][attrib])
+                                    });
+                                    break;
+                                default:
+                                    let errMessage = 'No audit trail support for ' + key;
+                                    if (auditOptions.errorHandler) {
+                                        auditOptions.errorHandler(errMessage);
+                                    } else {
+                                        console.error(errMessage)
+                                    }
+                                    break;
+                            }
+                        } else {
+                            // a simple assignment
+                            original[key] = currentObject[key];
+                            updated[key] = queryObject._update[key];
                         }
                     });
                 }

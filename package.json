@@ -1,6 +1,6 @@
 {
   "name": "fng-audit",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "dependencies": {
     "@types/express": "^4.0.39",
     "@types/mongoose": "^4.7.24",
