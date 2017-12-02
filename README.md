@@ -22,8 +22,8 @@ In the call to create the forms-angular object (normally in the main server expr
     );
     
 Valid options:
-**errorHandler** : *function(err: string) : void* - a function to be called in the event of an error occuring within the server side of the audit plugin.
 
+**errorHandler** : *function(err: string) : void* - a function to be called in the event of an error occuring within the server side of the audit plugin.
 
 To enable auditing for a schema MySchema:
 
@@ -32,12 +32,15 @@ To enable auditing for a schema MySchema:
     MyModel = mongoose.model('modelName', MySchema);
 
 Valid options
+
 **strip** : *Array<string>* - an array of fields (or nested.fields) that are to be suppressed from the audit changes.  Hidden fields are automatically suppressed, as are updatedAt and __v
 
 Behaviour of the plugin can be modified by adding pseudo fields to the document (in the case of save or remove middleware) or to the query options (in the case of findOneAndUpdate, update or findOneAndRemove middlewares) as follows:
 
 **_noAudit** suppress the audit entry if true
+
 **_user** add the _id property of this value (if present) or the value itself as the user field of the Audit record
+
 **_op** add the value of this property as the op field of the Audit record (for noting the operation that caused the change)
 
 ### On the client side:
