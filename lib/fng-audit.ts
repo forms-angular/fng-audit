@@ -105,7 +105,7 @@ export function clean(obj: any, delFunc?: any): any {
 }
 
 export function getAuditTrail(modelName: string, id: string, callback: any) {
-    Audit.find({c: modelName, cId: id}, function (err:any , trail: Array<any>) {
+    Audit.find({c: modelName, cId: id}).sort({_id: -1}).exec(function (err:any , trail: Array<any>) {
         if (err) { return callback(err);}
         async.map(trail, function (changeRec: any, mapCallback) {
             let changedValues: Array<any> = [];
