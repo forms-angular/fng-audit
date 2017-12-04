@@ -117,7 +117,8 @@ export function getAuditTrail(modelName: string, id: string, callback: any) {
             }
             let comment = "modified " + changedFields.concat(changedValues).join(", ");
             return mapCallback(null, {
-                // changedBy: history.user,
+                operation: changeRec.op,
+                user: changeRec.user,
                 changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
                 oldVersion: changeRec.ver,
                 comment: comment

@@ -28,7 +28,11 @@
 
             $scope.buildHistUrl = function(change: any) {
                 return routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion)
-            }
+            };
+
+            $scope.userDesc = function(change: any) {
+                return change.user ? ('User:' + change.user) : '';
+            };
 
         }])
         .controller('FngAuditVerCtrl', ['$scope','$location','routingService','fngAuditServ', function($scope: any, $location: any, routingService: any, fngAuditServ: any) {

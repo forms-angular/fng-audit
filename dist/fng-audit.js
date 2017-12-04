@@ -23,6 +23,9 @@
             $scope.buildHistUrl = function (change) {
                 return routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion);
             };
+            $scope.userDesc = function (change) {
+                return change.user ? ('User:' + change.user) : '';
+            };
         }])
         .controller('FngAuditVerCtrl', ['$scope', '$location', 'routingService', 'fngAuditServ', function ($scope, $location, routingService, fngAuditServ) {
             $scope.record = [];
@@ -53,7 +56,7 @@ angular.module('fngAuditModule').run(['$templateCache', function($templateCache)
   'use strict';
 
   $templateCache.put('templates/base-history.html',
-    "<div ng-controller=FngAuditHistCtrl><div ng-class=\"css('rowFluid')\" class=\"page-header list-header\"><div class=header-lhs><h1>History for {{modelName}} {{id}}</h1></div></div><div class=\"page-body list-body\"><error-display></error-display><div ng-class=\"css('rowFluid')\"><a ng-repeat=\"change in changes\" ng-href={{buildHistUrl(change)}}><div class=list-item><div ng-class=\"css('span',12)\">{{ change.comment }} {{ change.changedAt }}</div></div></a></div></div></div>"
+    "<div ng-controller=FngAuditHistCtrl><div ng-class=\"css('rowFluid')\" class=\"page-header list-header\"><div class=header-lhs><h1>History for {{modelName}} {{id}}</h1></div></div><div class=\"page-body list-body\"><error-display></error-display><div ng-class=\"css('rowFluid')\"><a ng-repeat=\"change in changes\" ng-href={{buildHistUrl(change)}}><div class=list-item><div ng-class=\"css('span',12)\">{{ change.comment }} {{ change.op }} {{ change.changedAt }} {{ userDesc(change) }}</div></div></a></div></div></div>"
   );
 
 
