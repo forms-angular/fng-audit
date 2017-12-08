@@ -1,6 +1,7 @@
 {
   "name": "fng-audit",
   "description": "Client part of forms-angular audit plugin",
+  "version":"0.11.0",
   "main": "./dist/fng-audit.js",
   "authors": [
     "Mark Chapman <mark.chapman@gmail.com>"
