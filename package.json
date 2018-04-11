@@ -1,12 +1,18 @@
 {
   "name": "fng-audit",
-  "version": "0.11.0",
+  "version": "0.12.0-pre",
+  "description": "Client part of forms-angular audit plugin",
+  "homepage": "https://www.forms-angular.org/#/plugins",
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@types/express": "^4.0.39",
     "@types/mongoose": "^4.7.24",
     "async": "^2.6.0",
     "colors": "^1.1.2",
     "dateformat": "^3.0.2",
+    "grunt-contrib-copy": "^1.0.0",
     "grunt-legacy-log": "^1.0.0",
     "iconv-lite": "^0.4.19",
     "jsondiffpatch": "0.2.5",
@@ -16,20 +22,29 @@
     "test": "mocha",
     "build": "grunt"
   },
-  "main": "./lib/fng-audit.js",
+  "main": "./dist/server/fng-audit.js",
   "devDependencies": {
     "@types/angular": "^1.6.39",
     "@types/async": "^2.0.45",
     "@types/chai": "^4.0.4",
-    "@types/es6-promise": "0.0.33",
     "@types/mocha": "^2.2.44",
     "chai": "^4.1.2",
-    "forms-angular": "0.11.0",
+    "forms-angular": "0.12.0-pre",
     "grunt": "^1.0.1",
     "grunt-angular-templates": "^1.1.0",
     "grunt-contrib-concat": "^1.0.1",
     "grunt-contrib-uglify": "^3.1.0",
     "mocha": "^4.0.1",
     "mongoose": "^4.12.4"
-  }
+  },
+  "license": "MIT",
+  "authors": [
+    "Mark Chapman <mark.chapman@gmail.com>"
+  ],
+  "keywords": [
+    "forms-angular",
+    "mongoose",
+    "audit",
+    "history"
+  ]
 }

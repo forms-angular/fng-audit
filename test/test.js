@@ -370,3 +370,4 @@ describe('Mongoose Plugin', function () {
         });
     });
 });
+//# sourceMappingURL=test.js.map

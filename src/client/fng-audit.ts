@@ -1,5 +1,3 @@
-///<reference path="../node_modules/forms-angular/typings/globals/angular/index.d.ts"/>
-
 (function () {
     'use strict';
 

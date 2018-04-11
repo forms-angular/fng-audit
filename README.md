@@ -13,6 +13,7 @@ Plugin for forms angular that comprises:
 In the call to create the forms-angular object (normally in the main server express start-up module) pass the plugin controller as follows:
      
     var fngAudit = require('fng-audit');
+
     var DataFormHandler = new (formsAngular)(app,
         {
             plugins:[
@@ -45,7 +46,7 @@ Behaviour of the plugin can be modified by adding pseudo fields to the document 
 
 ### On the client side:
 
-    <script src="fng-audit/dist/fng-audit.js"></script>
+    <script src="fng-audit/dist/client/fng-audit.js"></script>
 
 Add **fngAuditModule** to your app's list of services.
 
