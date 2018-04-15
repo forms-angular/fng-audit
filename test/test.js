@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 var chai = require("chai");
 var mongoose = require("mongoose");
-var fngAudit = require("../lib/fng-audit");
+var fngAudit = require("../src/server/fng-audit");
 var assert = chai.assert;
 mongoose.connect("mongodb://localhost:27017/fng_audit_test", { useMongoClient: true });
 mongoose.Promise = global.Promise;

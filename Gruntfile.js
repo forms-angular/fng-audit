@@ -39,10 +39,18 @@ module.exports = function (grunt) {
     },
     copy: {
       dist: {
-        expand: true,
-        cwd: 'src/server/',
-        src: ['**/*.js'],
-        dest: 'dist/server/'
+        files: [{
+          expand: true,
+          cwd: 'src/server/',
+          src: ['**/*.js'],
+          dest: 'dist/server/'
+        },
+          {
+            expand: true,
+            cwd: 'src/client/',
+            src: 'fng-audit.js.map',
+            dest: 'dist/client/'
+          }]
       }
     }
 

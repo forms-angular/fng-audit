@@ -2,7 +2,7 @@ import * as chai from "chai";
 
 import * as mongoose from 'mongoose';
 
-let fngAudit = require("../lib/fng-audit");
+let fngAudit = require("../src/server/fng-audit");
 
 let assert = chai.assert;
 
