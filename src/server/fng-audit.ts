@@ -115,7 +115,14 @@ export function getAuditTrail(modelName: string, id: string, callback: any) {
                     changedFields.push(key);
                 }
             }
-            let comment = "modified " + changedFields.concat(changedValues).join(", ");
+            let comment: string;
+            if (changedFields.length > 0) {
+                comment = "modified " + changedFields.concat(changedValues).join(", ");
+            } else if (changeRec.op) {
+                comment = changeRec.op;
+            } else {
+                comment = 'Audit entry';
+            }
             return mapCallback(null, {
                 operation: changeRec.op,
                 user: changeRec.user,

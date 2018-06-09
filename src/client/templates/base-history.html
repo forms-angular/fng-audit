@@ -10,7 +10,7 @@
         <div ng-class="css('rowFluid')">
             <a ng-repeat="change in changes" ng-href="{{buildHistUrl(change)}}">
                 <div class="list-item">
-                    <div ng-class="css('span',12)">{{ change.comment }} {{ change.op }} {{ change.changedAt }} {{ userDesc(change) }}</div>
+                    <div ng-class="css('span',12)">{{ change.changedAt }} {{ change.comment }} {{ userDesc(change) }}</div>
                 </div>
             </a>
         </div>

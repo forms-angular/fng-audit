@@ -5,17 +5,15 @@ module.exports = function (grunt) {
   grunt.initConfig({
     concat: {
       dist: {
-        src: [
-          'src/client/*.js',
-          'src/client/templates/generated/*.js'
-        ],
+        src: [ 'src/client/*.js', '<%= ngtemplates.fngAuditModule.dest %>'],
         dest: 'dist/client/fng-audit.js'
       }
     },
     ngtemplates: {
       fngAuditModule: {
-        src: 'src/client/templates/**.html',
-        dest: 'src/client/templates/generated/templates.js',
+        cwd: 'src/client/',
+        src: 'templates/**.html',
+        dest: '.tmp/templates.js',
         options: {
           htmlmin: {
             collapseBooleanAttributes: true,

@@ -25,7 +25,7 @@
                 });
 
             $scope.buildHistUrl = function(change: any) {
-                return routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion)
+                return change.oldVersion ? routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion) : '#';
             };
 
             $scope.userDesc = function(change: any) {
