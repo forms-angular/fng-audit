@@ -201,7 +201,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
     if (chg) {
         let c: string = (<any>doc.constructor).modelName;
         let cId = doc._id;
-        Audit.findOne({c: c, cId: cId}).sort("-ver").exec(function (err:any, prevAudit:any) {
+        Audit.findOne({c: c, cId: cId, ver: {$exists: true}}).sort("-ver").exec(function (err:any, prevAudit:any) {
             if (err) {
                 return next(err);
             }
