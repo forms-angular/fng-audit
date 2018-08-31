@@ -52,5 +52,10 @@ Add **fngAuditModule** to your app's list of services.
 
 The following client side routes are added:
 
-`/<model>/<id>/history` displays a screen showing all the audited updates to a document
+`/<model>/<id>/history` displays a screen showing all the audited events involving a document
+
+`/<model>/<id>/changes` displays a screen showing all the audited changes to a document
+
 `/<model>/<id>/version/<version>` recreates the value of the specified version of the item and displays it in JSON format
+
+Each of these routes also support the `/<model>/<form>/<id>` variants

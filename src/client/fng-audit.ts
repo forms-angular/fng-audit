@@ -6,18 +6,23 @@
     auditModule
         .config(['routingServiceProvider', function(routingService: any) {
             routingService.addRoutes(null, [
-                {route: '/:model/:id/history', state: 'model::history', templateUrl: 'templates/base-history.html'},
-                {route: '/:model/:id/version/:version', state: 'model::version', templateUrl: 'templates/base-version.html'}
+                { route: '/:model/:id/history', state: 'model::history', templateUrl: 'templates/base-history.html' },
+                { route: '/:model/:form/:id/history', state: 'model::history', templateUrl: 'templates/base-history.html' },
+                { route: '/:model/:id/changes', state: 'model::history', templateUrl: 'templates/base-history.html' },
+                { route: '/:model/:form/:id/changes', state: 'model::history', templateUrl: 'templates/base-history.html' },
+                { route: '/:model/:id/version/:version', state: 'model::version', templateUrl: 'templates/base-version.html' },
+                { route: '/:model/:form/:id/version/:version', state: 'model::version', templateUrl: 'templates/base-version.html' }
                 ]);
             routingService.registerAction('history');
+            routingService.registerAction('changes');
             routingService.registerAction('version');
         }])
         .controller('FngAuditHistCtrl', ['$scope','$location','routingService','fngAuditServ', function($scope: any, $location: any, routingService: any, fngAuditServ: any) {
 
             $scope.changes = [];
-            angular.extend($scope, routingService.parsePathFunc()($location.$$path));
-
-            fngAuditServ.getHist($scope.modelName, $scope.id)
+            const path = $location.path();
+            angular.extend($scope, routingService.parsePathFunc()(path));
+            fngAuditServ.getHist($scope.modelName, $scope.id, path.split('/').slice(-1)[0])
                 .then(function(results: any) {
                     $scope.changes = results.data;
                 }, function(err: any) {
@@ -52,11 +57,11 @@
         }])
         .service('fngAuditServ', ['$http', function($http : any) {
             return {
-                getHist: function(modelName: string, id: string) {
-                    return $http.get('/api/' + modelName + '/' + id + '/history');
+                getHist: function(modelName: string, id: string, histAction = 'history') {
+                    return $http.get(`/api/${modelName}/${id}/${histAction}`);
                 },
                 getVersion: function(modelName: string, id: string, version: string) {
-                    return $http.get('/api/' + modelName + '/' + id + '/version/' + version);
+                    return $http.get(`/api/${modelName}/${id}/version/${version}`);
                 }
             }
         }]);

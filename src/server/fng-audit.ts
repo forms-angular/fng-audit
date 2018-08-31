@@ -41,7 +41,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
 
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
-        getAuditTrail(req.params.model, req.params.id, function(err:any, results:any) {
+        getAuditTrail(req.params.model, req.params.id, {}, function(err:any, results:any) {
             if (err) {
                 res.status(400).send(err);
             } else {
@@ -49,6 +49,17 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
             }
         })
     }]));
+
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/changes', function (req: any, res: any) {
+        getAuditTrail(req.params.model, req.params.id,  {chg: {$exists: true}}, function(err:any, results:any) {
+            if (err) {
+                res.status(400).send(err);
+            } else {
+                res.status(200).send(results);
+            }
+        })
+    }]));
+
 
     // fng.app.get('/:model/:id/snapshot/:date', function (req: any, res: any) {
     //     res.status(200).send('Hello');
@@ -104,8 +115,8 @@ export function clean(obj: any, delFunc?: any): any {
     return obj;
 }
 
-export function getAuditTrail(modelName: string, id: string, callback: any) {
-    Audit.find({c: modelName, cId: id}).sort({_id: -1}).exec(function (err:any , trail: Array<any>) {
+export function getAuditTrail(modelName: string, id: string, qry: any, callback: any) {
+    Audit.find(Object.assign(qry, {c : modelName, cId : id})).sort({_id: -1}).exec(function (err:any , trail: Array<any>) {
         if (err) { return callback(err);}
         async.map(trail, function (changeRec: any, mapCallback) {
             let changedValues: Array<any> = [];
