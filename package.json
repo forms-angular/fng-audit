@@ -1,6 +1,6 @@
 {
   "name": "fng-audit",
-  "version": "0.12.0-beta.36",
+  "version": "0.12.0-beta.37",
   "description": "Client part of forms-angular audit plugin",
   "homepage": "https://www.forms-angular.org/#/plugins",
   "files": [
@@ -27,7 +27,7 @@
     "@types/mocha": "5.2.5",
     "@types/mongoose": "5.3.12",
     "chai": "4.2.0",
-    "forms-angular": "0.12.0-beta.36",
+    "forms-angular": "0.12.0-beta.37",
     "grunt": "^1.0.4",
     "grunt-angular-templates": "1.1.0",
     "grunt-contrib-concat": "1.0.1",
