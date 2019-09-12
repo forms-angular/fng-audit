@@ -28,7 +28,7 @@
     "@types/mocha": "5.2.7",
     "@types/mongoose": "5.5.15",
     "chai": "4.2.0",
-    "forms-angular": "0.12.0-beta.47878721",
+    "forms-angular": "^0.12.0-beta.46",
     "grunt": "^1.0.4",
     "grunt-angular-templates": "^1.2.0",
     "grunt-contrib-concat": "1.0.1",
