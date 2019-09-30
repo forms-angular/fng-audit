@@ -6,7 +6,7 @@ let fngAudit = require("../src/server/fng-audit");
 
 let assert = chai.assert;
 
-mongoose.connect("mongodb://localhost:27017/fng_audit_test", {useMongoClient: true});
+mongoose.connect("mongodb://localhost:27017/fng_audit_test", {useNewUrlParser: true, useUnifiedTopology: true});
 (<any>mongoose).Promise = global.Promise;
 // mongoose.set('debug', true);
 
@@ -120,8 +120,8 @@ describe('Mongoose Plugin', function () {
 
     beforeEach('clear down the test database', function (done) {
         Promise.all([
-            Test.remove({}),
-            fngAudit.Audit.remove({})
+            Test.deleteMany({}),
+            fngAudit.Audit.deleteMany({})
         ])
             .then(() => {
                 done()
@@ -167,7 +167,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('creates an audit record', function (done) {
-            fngAudit.Audit.count({}, function (err: any, count: number) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
                 assert.isNull(err);
                 assert.equal(count, 1);
                 done();
@@ -191,11 +191,14 @@ describe('Mongoose Plugin', function () {
         });
 
         it('returns history', function(done) {
-            fngAudit.getAuditTrail('test', orig._id.toString(), function(err: any, obj: any) {
+            fngAudit.getAuditTrail('test', orig._id.toString(), null,function(err: any, obj: any) {
                 assert.isNull(err);
-                assert.deepEqual(obj[0].comment, 'modified aBoolean, aNumber, aString');
+                assert.match(obj[0].comment, /modified /);
+                assert.match(obj[0].comment, /aBoolean/);
+                assert.match(obj[0].comment, /aNumber/);
+                assert.match(obj[0].comment, /aString/);
                 done();
-            })
+            });
         })
 
     });
@@ -219,7 +222,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('creates an audit record', function (done) {
-            fngAudit.Audit.count({}, function (err: any, count: number) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
                 assert.isNull(err);
                 assert.equal(count, 1);
                 done();
@@ -264,7 +267,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('creates an audit record', function (done) {
-            fngAudit.Audit.count({}, function (err: any, count: number) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
                 assert.isNull(err);
                 assert.equal(count, 1);
                 done();
@@ -313,7 +316,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('creates an audit record', function (done) {
-            fngAudit.Audit.count({}, function (err: any, count: number) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
                 assert.isNull(err);
                 assert.equal(count, 1);
                 done();
@@ -359,7 +362,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('creates an audit record', function (done) {
-            fngAudit.Audit.count({}, function (err: any, count: number) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
                 assert.isNull(err);
                 assert.equal(count, 1);
                 done();
@@ -406,7 +409,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('creates an audit record', function (done) {
-            fngAudit.Audit.count({}, function (err: any, count: number) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
                 assert.isNull(err);
                 assert.equal(count, 1);
                 done();

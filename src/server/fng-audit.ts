@@ -1,8 +1,6 @@
-/// <reference types="mongoose" />
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
-import {DiffPatcher} from "jsondiffpatch";
 
 interface AuditOptions {
     debug?: Boolean;
@@ -38,7 +36,6 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     } catch (e) {
         Audit = mongooseInstance.model(modelName, auditSchema);
     }
-
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
         getAuditTrail(req.params.model, req.params.id, {}, function(err:any, results:any) {
@@ -89,24 +86,26 @@ export function clean(obj: any, delFunc?: any): any {
     delFunc = delFunc || function(obj: any, key: any) {delete obj[key]};
 
     for (let key in obj) {
-        if (key === '__v') {
-            delFunc(obj, key);
-        } else {
-            if (obj.hasOwnProperty(key) && typeof obj[key] === "object") {
-                if (Array.isArray(obj[key])) {
-                    if (obj[key].length === 0) {
-                        delFunc(obj, key);
+        if (obj.hasOwnProperty(key)) {
+            if (key === '__v') {
+                delFunc(obj, key);
+            } else {
+                if (typeof obj[key] === "object") {
+                    if (Array.isArray(obj[key])) {
+                        if (obj[key].length === 0) {
+                            delFunc(obj, key);
+                        } else {
+                            obj[key].forEach((elm: any, index: number) => {
+                                obj[key][index] = clean(obj[key][index], delFunc);
+                            });
+                        }
                     } else {
-                        obj[key].forEach((elm: any, index: number) => {
-                            obj[key][index] = clean(obj[key][index], delFunc);
-                        });
-                    }
-                } else {
-                    let cleaned = clean(obj[key], delFunc);
-                    if (cleaned && Object.keys(cleaned).length > 0) {
-                        obj[key] = cleaned;
-                    } else {
-                        delFunc(obj, key);
+                        let cleaned = clean(obj[key], delFunc);
+                        if (cleaned && Object.keys(cleaned).length > 0) {
+                            obj[key] = cleaned;
+                        } else {
+                            delFunc(obj, key);
+                        }
                     }
                 }
             }
@@ -116,38 +115,35 @@ export function clean(obj: any, delFunc?: any): any {
 }
 
 export function getAuditTrail(modelName: string, id: string, qry: any, callback: any) {
-    Audit.find(Object.assign(qry, {c : modelName, cId : id})).sort({_id: -1}).exec(function (err:any , trail: Array<any>) {
-        if (err) { return callback(err);}
-        async.map(trail, function (changeRec: any, mapCallback) {
-            let changedValues: Array<any> = [];
-            let changedFields = [];
-            for (let key in changeRec.chg) {
-                if (changeRec.chg.hasOwnProperty(key)) {
-                    changedFields.push(key);
+    Audit.find(Object.assign(qry || {}, {c : modelName, cId : id})).sort({_id: -1}).exec(function (err:any , trail: Array<any>) {
+        if (err) {
+            callback(err);
+        } else {
+            async.map(trail, function (changeRec: any, mapCallback) {
+                let changedValues: Array<any> = [];
+                let changedFields = [];
+                for (let key in changeRec.chg) {
+                    if (changeRec.chg.hasOwnProperty(key)) {
+                        changedFields.push(key);
+                    }
                 }
-            }
-            let comment: string;
-            if (changedFields.length > 0) {
-                comment = "modified " + changedFields.concat(changedValues).join(", ");
-            } else if (changeRec.op) {
-                comment = changeRec.op;
-            } else {
-                comment = 'Audit entry';
-            }
-            return mapCallback(null, {
-                operation: changeRec.op,
-                user: changeRec.user,
-                changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
-                oldVersion: changeRec.ver,
-                comment: comment
-            })
-        }, function (err, output) {
-            if (err) {
-                console.error(err);
-                return callback(err, null);
-            }
-            return callback(null, output);
-        });
+                let comment: string;
+                if (changedFields.length > 0) {
+                    comment = "modified " + changedFields.concat(changedValues).join(", ");
+                } else if (changeRec.op) {
+                    comment = changeRec.op;
+                } else {
+                    comment = 'Audit entry';
+                }
+                mapCallback(err, {
+                    operation: changeRec.op,
+                    user: changeRec.user,
+                    changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
+                    oldVersion: changeRec.ver,
+                    comment: comment
+                });
+            }, callback);
+        }
     });
 }
 
