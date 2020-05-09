@@ -220,7 +220,12 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
             };
             if (user) {auditRec.user = user; }
             if (op) {auditRec.op = op; }
-            Audit.create(auditRec, next);
+            Audit.create(auditRec, (err: Error | null) => {
+                if (err) {
+                    console.log(`Error creating audit object: ${err.message}`)
+                }
+                next()
+            });
         });
     } else {
         next();
@@ -303,9 +308,20 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                                     break;
                             }
                         } else {
-                            // a simple assignment
-                            original[key] = currentObject[key];
-                            updated[key] = queryObject._update[key];
+                            // an assignment
+                            let parts = key.split('.');
+                            let o = original;
+                            let u = updated;
+                            let c = currentObject;
+                            while (parts.length > 1) {
+                                let part = parts.shift();
+                                o = o[part] = o[part] || {};
+                                u = u[part] = u[part] || {};
+                                c = c[part];
+                            }
+                            let part = parts.shift();
+                            o[part] = c[part];
+                            u[part] = queryObject._update[part];
                         }
                     });
                 }
@@ -352,6 +368,26 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         }
     });
 
+    // schema.pre("updateOne", function (next: any) {
+    //     console.log('in document updateOne');
+    //     if (this._noAudit) {
+    //         next();
+    //     } else {
+    //         let that = this;
+    //         try {
+    //             getHiddenFields(that.constructor.collection.collectionName, options);
+    //             that.constructor.findOne({_id: that._id}, function(err: any, original: any) {
+    //                 auditFromObject(that, original, that.modifiedPaths(true), options, next);
+    //             });
+    //         } catch(e) {
+    //             if (auditOptions.errorHandler) {
+    //                 auditOptions.errorHandler(e.message);
+    //             }
+    //             next();
+    //         }
+    //     }
+    // });
+
     schema.pre("remove", function(next: any) {
         if (this._noAudit) {
             next()
@@ -390,6 +426,24 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     });
 
     schema.pre("update", function (next: any) {
+        console.log('ibn update query m/ware');
+        if (this.options._noAudit) {
+            next()
+        } else {
+            try {
+                getHiddenFields(this.mongooseCollection.collectionName, options);
+                auditFromUpdate(this, options, next);
+            } catch(e) {
+                if (auditOptions.errorHandler) {
+                    auditOptions.errorHandler(e.message);
+                }
+                next();
+            }
+
+        }
+    });
+
+    schema.pre("updateOne", function (next: any) {
         if (this.options._noAudit) {
             next()
         } else {

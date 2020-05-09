@@ -6,7 +6,11 @@ let fngAudit = require("../src/server/fng-audit");
 
 let assert = chai.assert;
 
-mongoose.connect("mongodb://localhost:27017/fng_audit_test", {useNewUrlParser: true, useUnifiedTopology: true});
+mongoose.connect("mongodb://localhost:27017/fng_audit_test", {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    useFindAndModify: false,
+});
 (<any>mongoose).Promise = global.Promise;
 // mongoose.set('debug', true);
 
@@ -387,6 +391,52 @@ describe('Mongoose Plugin', function () {
 
     });
 
+    describe('updateOne', function() {
+
+        let orig: any;
+
+        beforeEach(function (done) {
+            orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+            Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                if (err) {
+                    throw err
+                }
+                orig = test[0].toObject();
+                Test.updateOne({aString: 'New', 'subObject.attrib': 42}, function (err: any) {
+                    if (err) {
+                        throw err
+                    }
+                    done();
+                })
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function(done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function(err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
+
+    });
+
     describe('findOneAndRemove', function() {
 
         let orig: any;
@@ -434,4 +484,6 @@ describe('Mongoose Plugin', function () {
 
     });
 
+    it('needs to change the beforeEach to before');
+    it('needs to do all the other middlewares at https://mongoosejs.com/docs/middleware.html');
 });
