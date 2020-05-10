@@ -29,14 +29,16 @@
                 }, function(err: any) {
                     console.log(err);
                 });
+            $scope.lastURL = '';
 
             $scope.buildHistUrl = function(index: number, oldVersion: number) {
                 if (index === 0) {
                     // current record
-                    return routingService.buildUrl(`${modelAndForm}/${$scope.id}/view`);
-                } else {
-                    return routingService.buildUrl(`${modelAndForm}/${$scope.id}/version/${oldVersion + 1}`);
+                    $scope.lastURL = routingService.buildUrl(`${modelAndForm}/${$scope.id}/view`);
+                } else if (oldVersion) {
+                    $scope.lastURL =  routingService.buildUrl(`${modelAndForm}/${$scope.id}/version/${oldVersion + 1}`);
                 }
+                return $scope.lastURL;
             };
 
             $scope.userDesc = function(change: any) {
