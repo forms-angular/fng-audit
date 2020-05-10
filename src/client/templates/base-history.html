@@ -8,9 +8,16 @@
     <div class="page-body list-body">
         <error-display></error-display>
         <div ng-class="css('rowFluid')">
-            <a ng-repeat="change in changes" ng-href="{{buildHistUrl(change)}}">
+            <a ng-repeat="change in changes" ng-href="{{buildHistUrl($index, change.oldVersion)}}">
                 <div class="list-item">
                     <div ng-class="css('span',12)">{{ change.changedAt }} {{ change.comment }} {{ userDesc(change) }}</div>
+                </div>
+            </a>
+        </div>
+        <div ng-class="css('rowFluid')">
+            <a ng-href="{{buildHistUrl(-1, -1)}}">
+                <div class="list-item">
+                    <div ng-class="css('span',12)">{{ createDate }} created</div>
                 </div>
             </a>
         </div>

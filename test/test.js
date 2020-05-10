@@ -80,6 +80,15 @@ describe('Object cleaning', function () {
 });
 describe('Mongoose Plugin', function () {
     var handledErr;
+    function clearDownDB(next) {
+        Promise.all([
+            Test.deleteMany({}),
+            fngAudit.Audit.deleteMany({})
+        ])
+            .then(function () {
+            next();
+        });
+    }
     before('set up the audit plugin', function () {
         fngAudit.controller({
             mongoose: mongoose,
@@ -103,15 +112,6 @@ describe('Mongoose Plugin', function () {
             }
         });
     });
-    beforeEach('clear down the test database', function (done) {
-        Promise.all([
-            Test.deleteMany({}),
-            fngAudit.Audit.deleteMany({})
-        ])
-            .then(function () {
-            done();
-        });
-    });
     describe('Error handling', function () {
         it('calls an error handler', function (done) {
             Test.create([{ aString: 'Original' }], function (err, test) {
@@ -130,20 +130,22 @@ describe('Mongoose Plugin', function () {
     });
     describe('save', function () {
         var orig, modified;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1 };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                test[0].set({ aString: 'Update', aNumber: 2, aBoolean: true });
-                test[0].save(function (err, test2) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    modified = test2.toObject();
-                    done();
+                    orig = test[0].toObject();
+                    test[0].set({ aString: 'Update', aNumber: 2, aBoolean: true });
+                    test[0].save(function (err, test2) {
+                        if (err) {
+                            throw err;
+                        }
+                        modified = test2.toObject();
+                        done();
+                    });
                 });
             });
         });
@@ -181,18 +183,23 @@ describe('Mongoose Plugin', function () {
     });
     describe('findOneAndUpdate', function () {
         var orig;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                Test.findByIdAndUpdate(test[0]._id, { $set: { aString: 'NewVal', 'subObject.attrib': 2 }, $push: { strings: 'add' } }, function (err) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    done();
+                    orig = test[0].toObject();
+                    Test.findByIdAndUpdate(test[0]._id, {
+                        $set: { aString: 'NewVal', 'subObject.attrib': 2 },
+                        $push: { strings: 'add' }
+                    }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
                 });
             });
         });
@@ -220,18 +227,20 @@ describe('Mongoose Plugin', function () {
     });
     describe('findOneAndUpdate - using an object or new vals', function () {
         var orig;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                Test.findByIdAndUpdate(test[0]._id, { aString: 'NewVal' }, function (err) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    done();
+                    orig = test[0].toObject();
+                    Test.findByIdAndUpdate(test[0]._id, { aString: 'NewVal' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
                 });
             });
         });
@@ -259,19 +268,21 @@ describe('Mongoose Plugin', function () {
     });
     describe('remove', function () {
         var orig;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1 };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                delete orig.__v;
-                test[0].remove(function (err) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    done();
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    test[0].remove(function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
                 });
             });
         });
@@ -299,18 +310,20 @@ describe('Mongoose Plugin', function () {
     });
     describe('update', function () {
         var orig;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1 };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                Test.update({ aString: 'New' }, function (err) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    done();
+                    orig = test[0].toObject();
+                    Test.update({ aString: 'New' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
                 });
             });
         });
@@ -338,18 +351,146 @@ describe('Mongoose Plugin', function () {
     });
     describe('updateOne', function () {
         var orig;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                Test.updateOne({ aString: 'New', 'subObject.attrib': 42 }, function (err) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1, subObject: { attrib: 1 } };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    done();
+                    orig = test[0].toObject();
+                    Test.updateOne({ aString: 'New', 'subObject.attrib': 42 }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
+    describe('findByIdAndRemove', function () {
+        var orig;
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
+                    if (err) {
+                        throw err;
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findByIdAndRemove(test[0]._id, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
+    describe('deleteOne', function () {
+        var orig;
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
+                    if (err) {
+                        throw err;
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.deleteOne({ aString: 'Original' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
+    describe('findOneAndDelete', function () {
+        var orig;
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
+                    if (err) {
+                        throw err;
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findOneAndDelete({ aString: 'Original' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
                 });
             });
         });
@@ -377,19 +518,21 @@ describe('Mongoose Plugin', function () {
     });
     describe('findOneAndRemove', function () {
         var orig;
-        beforeEach(function (done) {
-            orig = { aString: 'Original', aNumber: 1 };
-            Test.create([orig], function (err, test) {
-                if (err) {
-                    throw err;
-                }
-                orig = test[0].toObject();
-                delete orig.__v;
-                Test.findByIdAndRemove(test[0]._id, function (err) {
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
                     if (err) {
                         throw err;
                     }
-                    done();
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findOneAndRemove({ aString: 'Original' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
                 });
             });
         });
@@ -415,7 +558,88 @@ describe('Mongoose Plugin', function () {
             });
         });
     });
-    it('needs to change the beforeEach to before');
-    it('needs to do all the other middlewares at https://mongoosejs.com/docs/middleware.html');
+    describe('deleteMany', function () {
+        var orig;
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
+                    if (err) {
+                        throw err;
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findOneAndRemove({ aString: 'Original' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
+    describe('updateMany', function () {
+        var orig;
+        before(function (done) {
+            clearDownDB(function () {
+                orig = { aString: 'Original', aNumber: 1 };
+                Test.create([orig], function (err, test) {
+                    if (err) {
+                        throw err;
+                    }
+                    orig = test[0].toObject();
+                    Test.updateMany({ aString: 'New' }, function (err) {
+                        if (err) {
+                            throw err;
+                        }
+                        done();
+                    });
+                });
+            });
+        });
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err, count) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({ c: 'test', cId: orig._id }, function (err, auditRecs) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err, obj) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            });
+        });
+    });
 });
 //# sourceMappingURL=test.js.map

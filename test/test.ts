@@ -98,6 +98,16 @@ describe('Mongoose Plugin', function () {
 
     let handledErr: string;
 
+    function clearDownDB(next: () => void) {
+        Promise.all([
+            Test.deleteMany({}),
+            fngAudit.Audit.deleteMany({})
+        ])
+            .then(() => {
+                next()
+            });
+    }
+
     before('set up the audit plugin', function () {
         fngAudit.controller({
             mongoose: mongoose,
@@ -122,16 +132,6 @@ describe('Mongoose Plugin', function () {
         });
     });
 
-    beforeEach('clear down the test database', function (done) {
-        Promise.all([
-            Test.deleteMany({}),
-            fngAudit.Audit.deleteMany({})
-        ])
-            .then(() => {
-                done()
-            });
-    });
-
     describe('Error handling', function() {
 
         it ('calls an error handler', function(done) {
@@ -152,23 +152,25 @@ describe('Mongoose Plugin', function () {
 
         let orig: any, modified: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                test[0].set({aString: 'Update', aNumber: 2, aBoolean: true});
-                test[0].save(function (err, test2: mongoose.Document) {
+        before(function(done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
                     if (err) {
                         throw err
                     }
-                    modified = test2.toObject();
-                    done();
-                })
+                    orig = test[0].toObject();
+                    test[0].set({aString: 'Update', aNumber: 2, aBoolean: true});
+                    test[0].save(function (err, test2: mongoose.Document) {
+                        if (err) {
+                            throw err
+                        }
+                        modified = test2.toObject();
+                        done();
+                    })
+                });
             });
-        });
+        })
 
         it('creates an audit record', function (done) {
             fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
@@ -211,17 +213,25 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1, subObject:{attrib: 1}};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                Test.findByIdAndUpdate(test[0]._id, {$set:{aString:'NewVal', 'subObject.attrib':2}, $push:{strings:'add'}}, function (err: any) {
-                    if (err) { throw err }
-                    done();
-                })
+        before(function (done) {
+            clearDownDB(() => {
+
+                orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    Test.findByIdAndUpdate(test[0]._id, {
+                        $set: {aString: 'NewVal', 'subObject.attrib': 2},
+                        $push: {strings: 'add'}
+                    }, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
             });
         });
 
@@ -256,17 +266,21 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1, subObject:{attrib: 1}};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                Test.findByIdAndUpdate(test[0]._id, {aString:'NewVal'}, function (err: any) {
-                    if (err) { throw err }
-                    done();
-                })
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    Test.findByIdAndUpdate(test[0]._id, {aString: 'NewVal'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
             });
         });
 
@@ -302,20 +316,22 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                delete orig.__v;
-                test[0].remove(function (err) {
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
                     if (err) {
                         throw err
                     }
-                    done();
-                })
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    test[0].remove(function (err) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
             });
         });
 
@@ -349,19 +365,21 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                Test.update({aString: 'New'}, function (err: any) {
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
                     if (err) {
                         throw err
                     }
-                    done();
-                })
+                    orig = test[0].toObject();
+                    Test.update({aString: 'New'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
             });
         });
 
@@ -395,19 +413,21 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                Test.updateOne({aString: 'New', 'subObject.attrib': 42}, function (err: any) {
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
                     if (err) {
                         throw err
                     }
-                    done();
-                })
+                    orig = test[0].toObject();
+                    Test.updateOne({aString: 'New', 'subObject.attrib': 42}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
             });
         });
 
@@ -435,26 +455,268 @@ describe('Mongoose Plugin', function () {
             })
         });
 
+    });
+
+    describe('findByIdAndRemove', function() {
+
+        let orig: any;
+
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findByIdAndRemove(test[0]._id, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function(done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function(err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
+
+    });
+
+    describe('deleteOne', function() {
+
+        let orig: any;
+
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.deleteOne({aString: 'Original'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
+    });
+
+    describe('findOneAndDelete', function() {
+
+        let orig: any;
+
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findOneAndDelete({aString: 'Original'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
     });
 
     describe('findOneAndRemove', function() {
 
         let orig: any;
 
-        beforeEach(function (done) {
-            orig = {aString: 'Original', aNumber: 1};
-            Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                orig = test[0].toObject();
-                delete orig.__v;
-                Test.findByIdAndRemove(test[0]._id, function (err: any) {
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
                     if (err) {
                         throw err
                     }
-                    done();
-                })
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findOneAndRemove({aString: 'Original'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
+    });
+
+    describe('deleteMany', function() {
+
+        let orig: any;
+
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    delete orig.__v;
+                    Test.findOneAndRemove({aString: 'Original'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
+            });
+        });
+
+        it('creates an audit record', function (done) {
+            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
+                assert.isNull(err);
+                assert.equal(count, 1);
+                done();
+            });
+        });
+
+        it('records changes in audit record', function (done) {
+            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
+                assert.equal(auditRecs.length, 1);
+                assert.exists(auditRecs[0].chg);
+                done();
+            });
+        });
+
+        it('returns version 0', function (done) {
+            fngAudit.getVersion(Test, orig._id.toString(), '0', function (err: any, obj: any) {
+                assert.isNull(err);
+                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
+                done();
+            })
+        });
+    });
+
+    describe('updateMany', function() {
+
+        let orig: any;
+
+        before(function (done) {
+            clearDownDB(() => {
+                orig = {aString: 'Original', aNumber: 1};
+                Test.create([orig], function (err: any, test: mongoose.Document[]) {
+                    if (err) {
+                        throw err
+                    }
+                    orig = test[0].toObject();
+                    Test.updateMany({aString: 'New'}, function (err: any) {
+                        if (err) {
+                            throw err
+                        }
+                        done();
+                    })
+                });
             });
         });
 
@@ -484,6 +746,4 @@ describe('Mongoose Plugin', function () {
 
     });
 
-    it('needs to change the beforeEach to before');
-    it('needs to do all the other middlewares at https://mongoosejs.com/docs/middleware.html');
 });

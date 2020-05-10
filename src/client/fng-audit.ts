@@ -18,10 +18,11 @@
             routingService.registerAction('version');
         }])
         .controller('FngAuditHistCtrl', ['$scope','$location','routingService','fngAuditServ', function($scope: any, $location: any, routingService: any, fngAuditServ: any) {
-
             $scope.changes = [];
             const path = $location.path();
             angular.extend($scope, routingService.parsePathFunc()(path));
+            const modelAndForm = `${$scope.modelName}${$scope.formName ? `/${$scope.formName}` : ''}`;
+            $scope.createDate = new Date( parseInt( $scope.id.toString().substring(0,8), 16 ) * 1000 ).toISOString();
             fngAuditServ.getHist($scope.modelName, $scope.id, path.split('/').slice(-1)[0])
                 .then(function(results: any) {
                     $scope.changes = results.data;
@@ -29,8 +30,13 @@
                     console.log(err);
                 });
 
-            $scope.buildHistUrl = function(change: any) {
-                return change.oldVersion ? routingService.buildUrl($scope.modelName + '/' + $scope.id + '/version/' + change.oldVersion) : '#';
+            $scope.buildHistUrl = function(index: number, oldVersion: number) {
+                if (index === 0) {
+                    // current record
+                    return routingService.buildUrl(`${modelAndForm}/${$scope.id}/view`);
+                } else {
+                    return routingService.buildUrl(`${modelAndForm}/${$scope.id}/version/${oldVersion + 1}`);
+                }
             };
 
             $scope.userDesc = function(change: any) {

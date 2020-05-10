@@ -37,48 +37,47 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         Audit = mongooseInstance.model(modelName, auditSchema);
     }
 
-    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
-        getAuditTrail(req.params.model, req.params.id, {}, function(err:any, results:any) {
+    function getCallback(res: any) {
+        return function (err: any, results: any) {
             if (err) {
                 res.status(400).send(err);
             } else {
                 res.status(200).send(results);
             }
-        })
+        };
+    }
+
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
+        getAuditTrail(req.params.model, req.params.id, {}, getCallback(res))
     }]));
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/changes', function (req: any, res: any) {
-        getAuditTrail(req.params.model, req.params.id,  {chg: {$exists: true}}, function(err:any, results:any) {
-            if (err) {
-                res.status(400).send(err);
-            } else {
-                res.status(200).send(results);
-            }
-        })
+        getAuditTrail(req.params.model, req.params.id,  {chg: {$exists: true}}, getCallback(res))
     }]));
 
+    // Maybe add fng.app.get('/:model/:id/snapshot/:date'...);
 
-    // fng.app.get('/:model/:id/snapshot/:date', function (req: any, res: any) {
-    //     res.status(200).send('Hello');
-    // });
-    //
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', function (req: any, res: any) {
-        getVersion(fng.getResource(req.params.model).model, req.params.id, req.params.version, function(err: any, obj: any) {
-            if (err) {
-                res.status(404).send(err)
-            } else {
-                res.status(200).send(obj);
-            }
-        });
+        getVersion(fng.getResource(req.params.model).model, req.params.id, req.params.version, getCallback(res));
     }]));
 }
 
-function stripAttribFromObject(attrib: string, object: any) {
-    let cur = object;
+function extractPossiblyNestedPath(tree: string[], obj: any): any {
+    tree.forEach(branch => {
+        if (obj) {
+            obj = obj[branch]
+        }
+    });
+    return obj;
+}
+
+function stripAttribFromObject(attrib: string, obj: any) {
     let tree = attrib.split('.');
     let last = tree.pop();
-    tree.forEach(branch => {if (cur) { cur = cur[branch]}});
-    if (cur) {delete cur[last]}
+    obj = extractPossiblyNestedPath(tree, obj);
+    if (obj) {
+        delete obj[last]
+    }
 }
 
 export function clean(obj: any, delFunc?: any): any {
@@ -233,19 +232,16 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
 }
 
 function assignPossiblyNested(dest: any, src: any, attrib: string) {
-    let tree = attrib.split('.');
-    let last = tree.pop();
     let srcVal;
     let cur: any;
+    let tree = attrib.split('.');
+    let last = tree.pop();
     if (typeof src !== "object") {
         // We are assigning a value
         srcVal = src;
     } else {
         // we are copying from an analogous object
-        cur = src;
-        tree.forEach(branch => {
-            if (cur) cur = cur[branch]
-        });
+        cur = extractPossiblyNestedPath(tree, src);
         if (cur) {
             srcVal = cur[last]
         }
@@ -273,7 +269,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
             let updated: any;
             async.eachSeries(results, function (currentObject: any, callback) {
                 updated = {};
-                if (queryOp === 'findOneAndRemove') {
+                if (['findOneAndRemove','deleteOne','findOneAndDelete'].includes(queryOp)) {
                     original = currentObject;
                 } else {
                     original = {};
@@ -309,19 +305,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                             }
                         } else {
                             // an assignment
-                            let parts = key.split('.');
-                            let o = original;
-                            let u = updated;
-                            let c = currentObject;
-                            while (parts.length > 1) {
-                                let part = parts.shift();
-                                o = o[part] = o[part] || {};
-                                u = u[part] = u[part] || {};
-                                c = c[part];
-                            }
-                            let part = parts.shift();
-                            o[part] = c[part];
-                            u[part] = queryObject._update[part];
+                            assignPossiblyNested(original, currentObject, key);
                         }
                     });
                 }
@@ -368,26 +352,6 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         }
     });
 
-    // schema.pre("updateOne", function (next: any) {
-    //     console.log('in document updateOne');
-    //     if (this._noAudit) {
-    //         next();
-    //     } else {
-    //         let that = this;
-    //         try {
-    //             getHiddenFields(that.constructor.collection.collectionName, options);
-    //             that.constructor.findOne({_id: that._id}, function(err: any, original: any) {
-    //                 auditFromObject(that, original, that.modifiedPaths(true), options, next);
-    //             });
-    //         } catch(e) {
-    //             if (auditOptions.errorHandler) {
-    //                 auditOptions.errorHandler(e.message);
-    //             }
-    //             next();
-    //         }
-    //     }
-    // });
-
     schema.pre("remove", function(next: any) {
         if (this._noAudit) {
             next()
@@ -408,72 +372,37 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     /*
             Query middleware.  "this" is the query
      */
-
-    schema.pre("findOneAndUpdate", function (next: any) {
-        if (this.options._noAudit) {
-            next();
-        } else {
-            try {
-                getHiddenFields(this.mongooseCollection.collectionName, options);
-                auditFromUpdate(this, options, next);
-            } catch(e) {
-                if (auditOptions.errorHandler) {
-                    auditOptions.errorHandler(e.message);
+    function doUpdateHandling() {
+        return function (next: any) {
+            if (this.options._noAudit) {
+                next()
+            } else {
+                try {
+                    getHiddenFields(this.mongooseCollection.collectionName, options);
+                    auditFromUpdate(this, options, next);
+                } catch (e) {
+                    if (auditOptions.errorHandler) {
+                        auditOptions.errorHandler(e.message);
+                    }
+                    next();
                 }
-                next();
+
             }
-        }
-    });
+        };
+    }
 
-    schema.pre("update", function (next: any) {
-        console.log('ibn update query m/ware');
-        if (this.options._noAudit) {
-            next()
-        } else {
-            try {
-                getHiddenFields(this.mongooseCollection.collectionName, options);
-                auditFromUpdate(this, options, next);
-            } catch(e) {
-                if (auditOptions.errorHandler) {
-                    auditOptions.errorHandler(e.message);
-                }
-                next();
-            }
+    schema.pre("findOneAndUpdate", doUpdateHandling());
 
-        }
-    });
+    schema.pre("update", doUpdateHandling());
 
-    schema.pre("updateOne", function (next: any) {
-        if (this.options._noAudit) {
-            next()
-        } else {
-            try {
-                getHiddenFields(this.mongooseCollection.collectionName, options);
-                auditFromUpdate(this, options, next);
-            } catch(e) {
-                if (auditOptions.errorHandler) {
-                    auditOptions.errorHandler(e.message);
-                }
-                next();
-            }
+    schema.pre("updateOne", doUpdateHandling());
 
-        }
-    });
+    schema.pre("updateMany", doUpdateHandling());
 
-    schema.pre("findOneAndRemove", function (next: any) {
-        if (this.options._noAudit) {
-            next();
-        } else {
-            try {
-                getHiddenFields(this.mongooseCollection.collectionName, options);
-                auditFromUpdate(this, options, next);
-            } catch(e) {
-                if (auditOptions.errorHandler) {
-                    auditOptions.errorHandler(e.message);
-                }
-                next();
-            }
-        }
-    });
+    schema.pre("findOneAndRemove", doUpdateHandling());
+
+    schema.pre("deleteOne", doUpdateHandling());
+
+    schema.pre("findOneAndDelete", doUpdateHandling());
 
 }
