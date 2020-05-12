@@ -26,19 +26,30 @@
             fngAuditServ.getHist($scope.modelName, $scope.id, path.split('/').slice(-1)[0])
                 .then(function(results: any) {
                     $scope.changes = results.data;
+                    if ($scope.changes.length > 0) {
+                        if ($scope.changes[$scope.changes.length-1].operation !== 'create') {
+                            $scope.inferCreate = true;
+                        }
+                        let lastURL = 'view';
+                        $scope.changes.forEach((c: any) => {
+                            c.url = lastURL;
+                            if (typeof c.oldVersion !== "undefined") {
+                                lastURL = 'version/' + c.oldVersion;
+                            }
+                        })
+                    } else {
+                        fngAuditServ.checkValidItem($scope.modelName, $scope.id)
+                            .then(() => {$scope.inferCreate = true});
+                    }
                 }, function(err: any) {
-                    console.log(err);
+                    $scope.errorVisible = true;
+                    $scope.alertTitle = err.statusText;
+                    $scope.errorMessage = err.data;
                 });
             $scope.lastURL = '';
 
-            $scope.buildHistUrl = function(index: number, oldVersion: number) {
-                if (index === 0) {
-                    // current record
-                    $scope.lastURL = routingService.buildUrl(`${modelAndForm}/${$scope.id}/view`);
-                } else if (oldVersion) {
-                    $scope.lastURL =  routingService.buildUrl(`${modelAndForm}/${$scope.id}/version/${oldVersion + 1}`);
-                }
-                return $scope.lastURL;
+            $scope.buildHistUrl = function(lastPart: string) {
+                return routingService.buildUrl(`${modelAndForm}/${$scope.id}/${lastPart}`);
             };
 
             $scope.userDesc = function(change: any) {
@@ -53,9 +64,18 @@
 
             fngAuditServ.getVersion($scope.modelName, $scope.id, $scope.tab)
                 .then(function(results: any) {
-                    $scope.version = results.data;
+                    // Check for a generated version 0 of a non existent item
+                    if ($scope.tab === '0' && Object.keys(results.data).length === 1) {
+                        $scope.errorVisible = true;
+                        $scope.alertTitle = 'Error';
+                        $scope.errorMessage = `No such ${$scope.modelName} as ${$scope.id}`;
+                    } else {
+                        $scope.version = results.data;
+                    }
                 }, function(err: any) {
-                    console.log(err);
+                    $scope.errorVisible = true;
+                    $scope.alertTitle = err.statusText;
+                    $scope.errorMessage = err.data;
                 });
 
             $scope.buildHistUrl = function(change: any) {
@@ -70,10 +90,12 @@
                 },
                 getVersion: function(modelName: string, id: string, version: string) {
                     return $http.get(`/api/${modelName}/${id}/version/${version}`);
+                },
+                checkValidItem: function(modelName: string, id: string) {
+                    return $http.get(`/api/${modelName}/${id}`);
                 }
             }
         }]);
 
 })();
-
 

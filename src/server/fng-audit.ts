@@ -38,9 +38,9 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     }
 
     function getCallback(res: any) {
-        return function (err: any, results: any) {
+        return function (err: Error, results: any) {
             if (err) {
-                res.status(400).send(err);
+                res.status(400).send(err.message);
             } else {
                 res.status(200).send(results);
             }
@@ -48,17 +48,22 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     }
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
-        getAuditTrail(req.params.model, req.params.id, {}, getCallback(res))
+        getAuditTrail(fng, req.params.model, req.params.id, {}, getCallback(res))
     }]));
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/changes', function (req: any, res: any) {
-        getAuditTrail(req.params.model, req.params.id,  {chg: {$exists: true}}, getCallback(res))
+        getAuditTrail(fng, req.params.model, req.params.id,  {chg: {$exists: true}}, getCallback(res))
     }]));
 
     // Maybe add fng.app.get('/:model/:id/snapshot/:date'...);
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', function (req: any, res: any) {
-        getVersion(fng.getResource(req.params.model).model, req.params.id, req.params.version, getCallback(res));
+        const resource = fng.getResource(req.params.model);
+        if (resource) {
+            getVersion(resource.model, req.params.id, req.params.version, getCallback(res));
+        } else {
+            res.status(404).send(`No such resource as ${req.params.model}`);
+        }
     }]));
 }
 
@@ -113,56 +118,62 @@ export function clean(obj: any, delFunc?: any): any {
     return obj;
 }
 
-export function getAuditTrail(modelName: string, id: string, qry: any, callback: any) {
-    Audit.find(Object.assign(qry || {}, {c : modelName, cId : id})).sort({_id: -1}).exec(function (err:any , trail: Array<any>) {
-        if (err) {
-            callback(err);
-        } else {
-            async.map(trail, function (changeRec: any, mapCallback) {
-                let changedValues: Array<any> = [];
-                let changedFields = [];
-                for (let key in changeRec.chg) {
-                    if (changeRec.chg.hasOwnProperty(key)) {
-                        changedFields.push(key);
+export function getAuditTrail(fng: any, modelName: string, id: string, qry: any, callback: any) {
+    if (fng.getResource(modelName)) {
+        Audit.find(Object.assign(qry || {}, {
+            c: modelName,
+            cId: id
+        })).sort({_id: -1}).exec(function (err: any, trail: Array<any>) {
+            if (err) {
+                callback(err);
+            } else {
+                async.map(trail, function (changeRec: any, mapCallback) {
+                    let changedValues: Array<any> = [];
+                    let changedFields = [];
+                    for (let key in changeRec.chg) {
+                        if (changeRec.chg.hasOwnProperty(key)) {
+                            changedFields.push(key);
+                        }
                     }
-                }
-                let comment: string;
-                if (changedFields.length > 0) {
-                    comment = "modified " + changedFields.concat(changedValues).join(", ");
-                } else if (changeRec.op) {
-                    comment = changeRec.op;
-                } else {
-                    comment = 'Audit entry';
-                }
-                mapCallback(err, {
-                    operation: changeRec.op,
-                    user: changeRec.user,
-                    changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
-                    oldVersion: changeRec.ver,
-                    comment: comment
-                });
-            }, callback);
-        }
-    });
+                    let comment: string;
+                    if (changedFields.length > 0) {
+                        comment = "modified " + changedFields.concat(changedValues).join(", ");
+                    } else if (changeRec.op) {
+                        comment = changeRec.op;
+                    } else {
+                        comment = 'Audit entry';
+                    }
+                    mapCallback(err, {
+                        operation: changeRec.op,
+                        user: changeRec.user,
+                        changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
+                        oldVersion: changeRec.ver,
+                        comment: comment
+                    });
+                }, callback);
+            }
+        });
+    } else {
+        callback(new Error(`No such resource as ${modelName}`));
+    }
 }
 
 export function getVersion(model: any, id: any, version: string, callback: any) {
     model.findOne({_id: id}, function (err: any, latest: any) {
         if (err) {
-            console.error(err);
             return callback(err, null);
         }
-        Audit.find({c: model.modelName, cId: id, ver: {$gte : parseInt(version, 10)}},
-            {ver:1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
+        Audit.find({c: model.modelName, cId: id, ver: {$gte: parseInt(version, 10)}},
+            {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
                 if (err) {
                     console.error(err);
                     return callback(err, null);
                 }
                 let object = latest ? latest.toObject() : {_id: Mongoose.Types.ObjectId(id)};
-                async.each(histories, function(history: any, eachCallback){
+                async.each(histories, function (history: any, eachCallback) {
                     (<any>jsondiffpatch).unpatch(object, history.chg);
                     eachCallback();
-                }, function(err){
+                }, function (err) {
                     if (err) {
                         console.error(err);
                         return callback(err, null);
@@ -173,23 +184,23 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
     });
 }
 
+function getPseudoField(name: string, updated: any, orig?: any) {
+    let retVal;
+    if (updated['_' + name]) {
+        retVal = updated['_' + name]._id || updated['_' + name];
+    } else if (orig && orig['_' + name]) {
+        retVal = orig['_' + name]._id || orig['_' + name];
+    } else if (orig && orig['__' + name]) {
+        retVal = orig['__' + name]._id || orig['__' + name];
+        delete orig['__' + name];
+    }
+    return retVal;
+}
+
 function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
 
-    function getPseudoField(name: string): any {
-        let retVal;
-        if (updated['_' + name]) {
-            retVal = updated['_' + name]._id || updated['_' + name];
-        } else if (orig['_' + name]) {
-            retVal = orig['_' + name]._id || orig['_' + name];
-        } else if (orig['__' + name]) {
-            retVal = orig['__' + name]._id || orig['__' + name];
-            delete orig['__' + name];
-        }
-        return retVal;
-    }
-
-    let user: any = getPseudoField('user');
-    let op: any = getPseudoField('op');
+    let user: any = getPseudoField('user', updated, orig);
+    let op: any = getPseudoField('op', updated, orig);
     // Remove the stuff you never want to audit
     let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
     let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
@@ -334,8 +345,26 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             Document middleware.  "this" is the document
      */
     schema.pre("save", function (next: any) {
-        if (this.isNew || this._noAudit) {
+        if (this._noAudit) {
             next();
+        } else if (this.isNew) {
+            let user = getPseudoField('user', this);
+            if (user) {
+                let auditRec: any = {
+                    c: (<any>this.constructor).modelName,
+                    cId: this._id,
+                    op: 'create',
+                    user
+                };
+                Audit.create(auditRec, (err: Error | null) => {
+                    if (err) {
+                        console.log(`Error creating audit object: ${err.message}`)
+                    }
+                    next()
+                });
+            } else {
+                next();
+            }
         } else {
             let that = this;
             try {
