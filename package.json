@@ -1,6 +1,6 @@
 {
   "name": "fng-audit",
-  "version": "0.12.0-beta.69",
+  "version": "0.12.0-beta.70",
   "description": "Client part of forms-angular audit plugin",
   "homepage": "https://www.forms-angular.org/#/plugins",
   "files": [
