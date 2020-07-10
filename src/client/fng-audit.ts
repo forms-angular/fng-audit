@@ -12,7 +12,7 @@
                 { route: '/:model/:form/:id/changes', state: 'model::history', templateUrl: 'templates/base-history.html' },
                 { route: '/:model/:id/version/:version', state: 'model::version', templateUrl: 'templates/base-version.html' },
                 { route: '/:model/:form/:id/version/:version', state: 'model::version', templateUrl: 'templates/base-version.html' }
-                ]);
+            ]);
             routingService.registerAction('history');
             routingService.registerAction('changes');
             routingService.registerAction('version');
