@@ -171,7 +171,7 @@ describe('Mongoose Plugin', function () {
             });
         });
         it('returns history', function (done) {
-            fngAudit.getAuditTrail('test', orig._id.toString(), null, function (err, obj) {
+            fngAudit.getAuditTrail({ getResource: function () { return true; } }, 'test', orig._id.toString(), null, function (err, obj) {
                 assert.isNull(err);
                 assert.match(obj[0].comment, /modified /);
                 assert.match(obj[0].comment, /aBoolean/);

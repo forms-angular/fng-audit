@@ -197,7 +197,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('returns history', function(done) {
-            fngAudit.getAuditTrail('test', orig._id.toString(), null,function(err: any, obj: any) {
+            fngAudit.getAuditTrail({getResource: () => true}, 'test', orig._id.toString(), null,function(err: any, obj: any) {
                 assert.isNull(err);
                 assert.match(obj[0].comment, /modified /);
                 assert.match(obj[0].comment, /aBoolean/);
