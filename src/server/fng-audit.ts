@@ -1,6 +1,7 @@
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
+var cloneDeep = require('lodash.clonedeep');
 
 interface AuditOptions {
     debug?: Boolean;
@@ -199,8 +200,9 @@ export function auditAdHocEvent(user: string, description: string, details: any)
         }
     }
 
-    cleanKeys(details);    // Make sure mongoose doesn't barf on composite keys by putting quotes round them
-    return Audit.create({user, op: description, dets: details})
+    const copyDets = cloneDeep(details);
+    cleanKeys(copyDets);    // Make sure mongoose doesn't barf on composite keys by putting quotes round them
+    return Audit.create({user, op: description, dets: copyDets})
 }
 
 function getPseudoField(name: string, updated: any, orig?: any) {
