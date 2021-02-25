@@ -25,8 +25,9 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         c: String,   //collection
         cId: {type: Mongoose.Schema.Types.ObjectId},
         chg: {},
-        user: {},  // Taken from _user
+        user: {},  // Taken from _user or __usr
         op: String,  // Taken from _op - what operation is being performed?
+        dets: {},
         ver: Number
     });
 
@@ -184,6 +185,24 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
     });
 }
 
+export function auditAdHocEvent(user: string, description: string, details: any) {
+    function cleanKeys( obj: any) {
+        if (typeof obj === "object") {
+            Object.keys(obj).forEach(k => {
+                cleanKeys(obj[k]);
+                let safeKey = k.replace(/\./g,'-').replace(/^\$/, '#')
+                if (safeKey !== k) {
+                    obj[safeKey] = obj[k];
+                    delete obj[k];
+                }
+            })
+        }
+    }
+
+    cleanKeys(details);    // Make sure mongoose doesn't barf on composite keys by putting quotes round them
+    return Audit.create({user, op: description, dets: details})
+}
+
 function getPseudoField(name: string, updated: any, orig?: any) {
     let retVal;
     if (updated['_' + name]) {
@@ -199,7 +218,7 @@ function getPseudoField(name: string, updated: any, orig?: any) {
 
 function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
 
-    let user: any = getPseudoField('user', updated, orig);
+    let user: any = getPseudoField('user', updated, orig) || getPseudoField('_usr', updated, orig);
     let op: any = getPseudoField('op', updated, orig);
     // Remove the stuff you never want to audit
     let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
@@ -284,7 +303,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                     original = currentObject;
                 } else {
                     original = {};
-                    if (queryObject.options && queryObject.options._user) {original.__user = queryObject.options._user;}
+                    if (queryObject.options && queryObject.options._user || queryObject.options.__usr) {original.__user = queryObject.options._user  || queryObject.options.__usr;}
                     if (queryObject.options && queryObject.options._op) {original.__op = queryObject.options._op;}
                     if (queryObject._update) {
                         Object.keys(queryObject._update).forEach(key => {
@@ -297,6 +316,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                                 });
                                 switch (key) {
                                     case '$set':
+                                    case '$unset':
                                         // ignore $set - already dealt with
                                         break;
                                     case '$push':
@@ -350,7 +370,8 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         if (this._noAudit) {
             next();
         } else if (this.isNew) {
-            let user = getPseudoField('user', this);
+            // No point in auditing if we don't have a user, as the document itself does the job
+            let user = getPseudoField('user', this) || getPseudoField('_usr', this);
             if (user) {
                 let auditRec: any = {
                     c: (<any>this.constructor).modelName,
