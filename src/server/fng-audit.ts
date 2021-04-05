@@ -1,6 +1,7 @@
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
+import {AsyncResultCallback} from "async";
 var cloneDeep = require('lodash.clonedeep');
 
 interface AuditOptions {
@@ -22,6 +23,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     formsAngular = fng;
     mongooseInstance = formsAngular.mongoose;
     auditOptions = options || {};
+
     const auditSchema = new Mongoose.Schema({
         c: String,   //collection
         cId: {type: Mongoose.Schema.Types.ObjectId},
@@ -129,7 +131,13 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
             if (err) {
                 callback(err);
             } else {
-                async.map(trail, function (changeRec: any, mapCallback) {
+                async.map(trail, function (changeRec: any, mapCallback: AsyncResultCallback<IChangeRecord>) {
+                    let retVal: IChangeRecord = {
+                        operation: changeRec.op,
+                        user: changeRec.user,
+                        changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
+                        oldVersion: changeRec.ver,
+                    }
                     let changedValues: Array<any> = [];
                     let changedFields = [];
                     for (let key in changeRec.chg) {
@@ -137,21 +145,15 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
                             changedFields.push(key);
                         }
                     }
-                    let comment: string;
                     if (changedFields.length > 0) {
-                        comment = "modified " + changedFields.concat(changedValues).join(", ");
+                        retVal.comment = "modified " + changedFields.concat(changedValues).join(", ");
+                        retVal.chg = changeRec.chg;
                     } else if (changeRec.op) {
-                        comment = changeRec.op;
+                        retVal.comment = changeRec.op;
                     } else {
-                        comment = 'Audit entry';
+                        retVal.comment = 'Audit entry';
                     }
-                    mapCallback(err, {
-                        operation: changeRec.op,
-                        user: changeRec.user,
-                        changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
-                        oldVersion: changeRec.ver,
-                        comment: comment
-                    });
+                    mapCallback(err, retVal);
                 }, callback);
             }
         });

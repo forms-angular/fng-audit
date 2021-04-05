@@ -59,3 +59,6 @@ The following client side routes are added:
 `/<model>/<id>/version/<version>` recreates the value of the specified version of the item and displays it in JSON format
 
 Each of these routes also support the `/<model>/<form>/<id>` variants
+
+You can set up a function $rootScope.describeUsers ({[userId: string]: any}) => IPromise<{[userId: string]: string}>
+to convert user ids into user descriptions.

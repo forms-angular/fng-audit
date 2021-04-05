@@ -17,15 +17,32 @@
             routingService.registerAction('changes');
             routingService.registerAction('version');
         }])
-        .controller('FngAuditHistCtrl', ['$scope','$location','routingService','fngAuditServ', function($scope: any, $location: any, routingService: any, fngAuditServ: any) {
+        .controller('FngAuditHistCtrl', ['$rootScope', '$scope','$location','routingService','fngAuditServ',
+                function($rootScope: any, $scope: IItemAuditScope, $location: any, routingService: any, fngAuditServ: any) {
             $scope.changes = [];
             const path = $location.path();
             angular.extend($scope, routingService.parsePathFunc()(path));
             const modelAndForm = `${$scope.modelName}${$scope.formName ? `/${$scope.formName}` : ''}`;
-            $scope.createDate = new Date( parseInt( $scope.id.toString().substring(0,8), 16 ) * 1000 ).toISOString();
+            $scope.createDate = new Date( parseInt( $scope.id.toString().substring(0,8), 16 ) * 1000 );
             fngAuditServ.getHist($scope.modelName, $scope.id, path.split('/').slice(-1)[0])
-                .then(function(results: any) {
-                    $scope.changes = results.data;
+                .then(function(result: { data: IChangeRecord[]; }) {
+                    $scope.changes = result.data;
+                    let users: {[userId: string]: null | string} = {};
+                    $scope.changes.forEach(c => {
+                        if (c.user) {
+                            users[c.user] = null;
+                        }
+                    })
+
+                    $rootScope?.describeUsers(users)
+                        .then((usersDesribed: {[userId: string]: string}) => {
+                            $scope.changes.forEach(c2 => {
+                                if (c2.user) {
+                                    c2.userDesc = usersDesribed[c2.user];
+                                }
+                            })
+                    })
+
                     if ($scope.changes.length > 0) {
                         if ($scope.changes[$scope.changes.length-1].operation !== 'create') {
                             $scope.inferCreate = true;
@@ -46,14 +63,9 @@
                     $scope.alertTitle = err.statusText;
                     $scope.errorMessage = err.data;
                 });
-            $scope.lastURL = '';
 
-            $scope.buildHistUrl = function(lastPart: string) {
+            $scope.buildHistUrl = function(lastPart: string): string {
                 return routingService.buildUrl(`${modelAndForm}/${$scope.id}/${lastPart}`);
-            };
-
-            $scope.userDesc = function(change: any) {
-                return change.user ? ('User:' + change.user) : '';
             };
 
         }])
@@ -85,7 +97,7 @@
         }])
         .service('fngAuditServ', ['$http', function($http : any) {
             return {
-                getHist: function(modelName: string, id: string, histAction = 'history') {
+                getHist: async function(modelName: string, id: string, histAction = 'history') : Promise<angular.IHttpResponse<IChangeRecord[]>> {
                     return $http.get(`/api/${modelName}/${id}/${histAction}`);
                 },
                 getVersion: function(modelName: string, id: string, version: string) {
