@@ -123,69 +123,78 @@ export function clean(obj: any, delFunc?: any): any {
 }
 
 export function getAuditTrail(fng: any, modelName: string, id: string, qry: any, callback: any) {
-    if (fng.getResource(modelName)) {
-        Audit.find(Object.assign(qry || {}, {
-            c: modelName,
-            cId: id
-        })).sort({_id: -1}).exec(function (err: any, trail: Array<any>) {
-            if (err) {
-                callback(err);
-            } else {
-                async.map(trail, function (changeRec: any, mapCallback: AsyncResultCallback<IChangeRecord>) {
-                    let retVal: IChangeRecord = {
-                        operation: changeRec.op,
-                        user: changeRec.user,
-                        changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
-                        oldVersion: changeRec.ver,
-                    }
-                    let changedValues: Array<any> = [];
-                    let changedFields = [];
-                    for (let key in changeRec.chg) {
-                        if (changeRec.chg.hasOwnProperty(key)) {
-                            changedFields.push(key);
+    if (Audit) {
+        if (fng.getResource(modelName)) {
+            Audit.find(Object.assign(qry || {}, {
+                c: modelName,
+                cId: id
+            })).sort({_id: -1}).exec(function (err: any, trail: Array<any>) {
+                if (err) {
+                    callback(err);
+                } else {
+                    async.map(trail, function (changeRec: any, mapCallback: AsyncResultCallback<IChangeRecord>) {
+                        let retVal: IChangeRecord = {
+                            operation: changeRec.op,
+                            user: changeRec.user,
+                            changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
+                            oldVersion: changeRec.ver,
                         }
-                    }
-                    if (changedFields.length > 0) {
-                        retVal.comment = "modified " + changedFields.concat(changedValues).join(", ");
-                        retVal.chg = changeRec.chg;
-                    } else if (changeRec.op) {
-                        retVal.comment = changeRec.op;
-                    } else {
-                        retVal.comment = 'Audit entry';
-                    }
-                    mapCallback(err, retVal);
-                }, callback);
-            }
-        });
+                        let changedValues: Array<any> = [];
+                        let changedFields = [];
+                        for (let key in changeRec.chg) {
+                            if (changeRec.chg.hasOwnProperty(key)) {
+                                changedFields.push(key);
+                            }
+                        }
+                        if (changedFields.length > 0) {
+                            retVal.comment = "modified " + changedFields.concat(changedValues).join(", ");
+                            retVal.chg = changeRec.chg;
+                        } else if (changeRec.op) {
+                            retVal.comment = changeRec.op;
+                        } else {
+                            retVal.comment = 'Audit entry';
+                        }
+                        mapCallback(err, retVal);
+                    }, callback);
+                }
+            });
+        } else {
+            callback(new Error(`No such resource as ${modelName}`));
+        }
     } else {
-        callback(new Error(`No such resource as ${modelName}`));
+        // Probably a test
+        callback();
     }
 }
 
 export function getVersion(model: any, id: any, version: string, callback: any) {
-    model.findOne({_id: id}, function (err: any, latest: any) {
-        if (err) {
-            return callback(err, null);
-        }
-        Audit.find({c: model.modelName, cId: id, ver: {$gte: parseInt(version, 10)}},
-            {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
-                if (err) {
-                    console.error(err);
-                    return callback(err, null);
-                }
-                let object = latest ? latest.toObject() : {_id: Mongoose.Types.ObjectId(id)};
-                async.each(histories, function (history: any, eachCallback) {
-                    (<any>jsondiffpatch).unpatch(object, history.chg);
-                    eachCallback();
-                }, function (err) {
+    if (Audit) {
+        model.findOne({_id: id}, function (err: any, latest: any) {
+            if (err) {
+                return callback(err, null);
+            }
+            Audit.find({c: model.modelName, cId: id, ver: {$gte: parseInt(version, 10)}},
+                {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
                     if (err) {
                         console.error(err);
                         return callback(err, null);
                     }
-                    callback(null, clean(object));
-                });
-            })
-    });
+                    let object = latest ? latest.toObject() : {_id: Mongoose.Types.ObjectId(id)};
+                    async.each(histories, function (history: any, eachCallback) {
+                        (<any>jsondiffpatch).unpatch(object, history.chg);
+                        eachCallback();
+                    }, function (err) {
+                        if (err) {
+                            console.error(err);
+                            return callback(err, null);
+                        }
+                        callback(null, clean(object));
+                    });
+                })
+        });
+    } else {
+        callback(null);
+    }
 }
 
 export function auditAdHocEvent(user: string, description: string, details: any) {
@@ -221,45 +230,56 @@ function getPseudoField(name: string, updated: any, orig?: any) {
 }
 
 function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
-
-    let user: any = getPseudoField('user', updated, orig) || getPseudoField('_usr', updated, orig);
-    let op: any = getPseudoField('op', updated, orig);
-    // Remove the stuff you never want to audit
-    let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
-    let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
-    let suppressedChanges = ['updatedAt','__v'];
-    ['strip','hidden'].forEach((prop) => {
-        if ((<any>options)[prop] && (<any>options)[prop].length > 0) {
-            suppressedChanges = suppressedChanges.concat((<any>options)[prop]);
-        }
-    });
-    suppressedChanges.forEach(attrib => {
-        stripAttribFromObject(attrib, stdOrig);
-        stripAttribFromObject(attrib, stdUpdated);
-    });
-    let chg = (<any>jsondiffpatch).diff(stdOrig, stdUpdated);
-    if (chg) {
-        let c: string = (<any>doc.constructor).modelName;
-        let cId = doc._id;
-        Audit.findOne({c: c, cId: cId, ver: {$exists: true}}).sort("-ver").exec(function (err:any, prevAudit:any) {
-            if (err) {
-                return next(err);
+    if (Audit) {
+        let user: any = getPseudoField('user', updated, orig) || getPseudoField('_usr', updated, orig);
+        let op: any = getPseudoField('op', updated, orig);
+        // Remove the stuff you never want to audit
+        let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
+        let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
+        let suppressedChanges = ['updatedAt', '__v'];
+        ['strip', 'hidden'].forEach((prop) => {
+            if ((<any>options)[prop] && (<any>options)[prop].length > 0) {
+                suppressedChanges = suppressedChanges.concat((<any>options)[prop]);
             }
-            let auditRec: any = {
+        });
+        suppressedChanges.forEach(attrib => {
+            stripAttribFromObject(attrib, stdOrig);
+            stripAttribFromObject(attrib, stdUpdated);
+        });
+        let chg = (<any>jsondiffpatch).diff(stdOrig, stdUpdated);
+        if (chg) {
+            let c: string = (<any>doc.constructor).modelName;
+            let cId = doc._id;
+            Audit.findOne({
                 c: c,
                 cId: cId,
-                ver: prevAudit ? prevAudit.ver + 1 : 0,
-                chg: chg
-            };
-            if (user) {auditRec.user = user; }
-            if (op) {auditRec.op = op; }
-            Audit.create(auditRec, (err: Error | null) => {
+                ver: {$exists: true}
+            }).sort("-ver").exec(function (err: any, prevAudit: any) {
                 if (err) {
-                    console.log(`Error creating audit object: ${err.message}`)
+                    return next(err);
                 }
-                next()
+                let auditRec: any = {
+                    c: c,
+                    cId: cId,
+                    ver: prevAudit ? prevAudit.ver + 1 : 0,
+                    chg: chg
+                };
+                if (user) {
+                    auditRec.user = user;
+                }
+                if (op) {
+                    auditRec.op = op;
+                }
+                Audit.create(auditRec, (err: Error | null) => {
+                    if (err) {
+                        console.log(`Error creating audit object: ${err.message}`)
+                    }
+                    next()
+                });
             });
-        });
+        } else {
+            next();
+        }
     } else {
         next();
     }
@@ -293,67 +313,75 @@ function assignPossiblyNested(dest: any, src: any, attrib: string) {
 }
 
 function auditFromUpdate(docUpdate: any, options: any, next: any) {
-    const queryObject = docUpdate;
-    const queryOp = queryObject.op;
-    queryObject.find(queryObject._conditions, function (err: any, results: any) {
-        if (err) {
-            return next(err);
-        } else {
-            let original: any;
-            let updated: any;
-            async.eachSeries(results, function (currentObject: any, callback) {
-                updated = {};
-                if (['findOneAndRemove','deleteOne','findOneAndDelete'].includes(queryOp)) {
-                    original = currentObject;
-                } else {
-                    original = {};
-                    if (queryObject.options && queryObject.options._user || queryObject.options.__usr) {original.__user = queryObject.options._user  || queryObject.options.__usr;}
-                    if (queryObject.options && queryObject.options._op) {original.__op = queryObject.options._op;}
-                    if (queryObject._update) {
-                        Object.keys(queryObject._update).forEach(key => {
-                            if (key[0] === '$') {
-                                Object.keys(queryObject._update[key]).forEach(attrib => {
-                                    if (key === '$set') {
-                                        assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
-                                    }
-                                    assignPossiblyNested(original, currentObject, attrib);
-                                });
-                                switch (key) {
-                                    case '$set':
-                                    case '$unset':
-                                        // ignore $set - already dealt with
-                                        break;
-                                    case '$push':
-                                        Object.keys(queryObject._update[key]).forEach(attrib => {
-                                            updated[attrib] = [];
-                                            Object.assign(updated[attrib], original[attrib]);
-                                            updated[attrib].push(queryObject._update[key][attrib])
-                                        });
-                                        break;
-                                    default:
-                                        let errMessage = 'No audit trail support for ' + key;
-                                        if (auditOptions.errorHandler) {
-                                            auditOptions.errorHandler(errMessage);
-                                        } else {
-                                            console.error(errMessage)
+    if (!Audit) {
+        return next();
+    } else {
+        const queryObject = docUpdate;
+        const queryOp = queryObject.op;
+        queryObject.find(queryObject._conditions, function (err: any, results: any) {
+            if (err) {
+                return next(err);
+            } else {
+                let original: any;
+                let updated: any;
+                async.eachSeries(results, function (currentObject: any, callback) {
+                    updated = {};
+                    if (['findOneAndRemove', 'deleteOne', 'findOneAndDelete'].includes(queryOp)) {
+                        original = currentObject;
+                    } else {
+                        original = {};
+                        if (queryObject.options && queryObject.options._user || queryObject.options.__usr) {
+                            original.__user = queryObject.options._user || queryObject.options.__usr;
+                        }
+                        if (queryObject.options && queryObject.options._op) {
+                            original.__op = queryObject.options._op;
+                        }
+                        if (queryObject._update) {
+                            Object.keys(queryObject._update).forEach(key => {
+                                if (key[0] === '$') {
+                                    Object.keys(queryObject._update[key]).forEach(attrib => {
+                                        if (key === '$set') {
+                                            assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
                                         }
-                                        break;
+                                        assignPossiblyNested(original, currentObject, attrib);
+                                    });
+                                    switch (key) {
+                                        case '$set':
+                                        case '$unset':
+                                            // ignore $set - already dealt with
+                                            break;
+                                        case '$push':
+                                            Object.keys(queryObject._update[key]).forEach(attrib => {
+                                                updated[attrib] = [];
+                                                Object.assign(updated[attrib], original[attrib]);
+                                                updated[attrib].push(queryObject._update[key][attrib])
+                                            });
+                                            break;
+                                        default:
+                                            let errMessage = 'No audit trail support for ' + key;
+                                            if (auditOptions.errorHandler) {
+                                                auditOptions.errorHandler(errMessage);
+                                            } else {
+                                                console.error(errMessage)
+                                            }
+                                            break;
+                                    }
+                                } else {
+                                    // an assignment
+                                    assignPossiblyNested(original, currentObject, key);
                                 }
-                            } else {
-                                // an assignment
-                                assignPossiblyNested(original, currentObject, key);
-                            }
-                        });
+                            });
+                        }
                     }
-                }
-                auditFromObject(currentObject, original, updated, options, function() {
-                    callback();
+                    auditFromObject(currentObject, original, updated, options, function () {
+                        callback();
+                    });
+                }, function done() {
+                    return next();
                 });
-            }, function done() {
-                return next();
-            });
-        }
-    });
+            }
+        });
+    }
 }
 
 function getHiddenFields(collectionName: string, options: AuditPluginOptions) {
@@ -411,7 +439,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     });
 
     schema.pre("remove", function(next: any) {
-        if (this._noAudit) {
+        if (this._noAudit || !Audit) {
             next()
         } else {
             try {
@@ -432,7 +460,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
      */
     function doUpdateHandling() {
         return function (next: any) {
-            if (this.options._noAudit) {
+            if (this.options._noAudit || !Audit) {
                 next()
             } else {
                 try {
