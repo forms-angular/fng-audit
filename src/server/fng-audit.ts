@@ -358,7 +358,9 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
 
 function getHiddenFields(collectionName: string, options: AuditPluginOptions) {
     if (!options.hidden) {
-        options.hidden = formsAngular.getResourceFromCollection(collectionName).options.hide;
+        // TODO: there is a problem here when doUpdateHandling has the collection name rather than the fng entity name
+        // Just using optional chaining for now
+        options.hidden = formsAngular?.getResourceFromCollection(collectionName)?.options?.hide;
     }
 }
 
