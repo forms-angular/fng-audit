@@ -373,7 +373,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             Document middleware.  "this" is the document
      */
     schema.pre("save", function (next: any) {
-        if (this._noAudit) {
+        if (this._noAudit || !Audit) {
             next();
         } else if (this.isNew) {
             // No point in auditing if we don't have a user, as the document itself does the job
