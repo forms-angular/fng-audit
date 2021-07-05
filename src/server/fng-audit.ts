@@ -136,7 +136,7 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
                         let retVal: IChangeRecord = {
                             operation: changeRec.op,
                             user: changeRec.user,
-                            changedAt: formsAngular.extractTimestampFromMongoID(changeRec._id),
+                            changedAt: fng.extractTimestampFromMongoID(changeRec._id),
                             oldVersion: changeRec.ver,
                         }
                         let changedValues: Array<any> = [];
