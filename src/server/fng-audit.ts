@@ -64,7 +64,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', function (req: any, res: any) {
         const resource = fng.getResource(req.params.model);
         if (resource) {
-            getVersion(resource.model, req.params.id, req.params.version, getCallback(res));
+            getVersion(resource.model, req.params.id, req.params.version, true, getCallback(res));
         } else {
             res.status(404).send(`No such resource as ${req.params.model}`);
         }
@@ -98,7 +98,7 @@ export function clean(obj: any, delFunc?: any): any {
             if (key === '__v') {
                 delFunc(obj, key);
             } else {
-                if (typeof obj[key] === "object") {
+                if (typeof obj[key] === "object" && !(obj[key] instanceof Date)) {
                     if (Array.isArray(obj[key])) {
                         if (obj[key].length === 0) {
                             delFunc(obj, key);
@@ -167,7 +167,7 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
     }
 }
 
-function getRevision(model: any, id: any, revisionCrit: any, callback: any) {
+function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean, callback: any) {
     if (Audit) {
         model.findOne({_id: id}, function (err: any, latest: any) {
             if (err) {
@@ -189,7 +189,7 @@ function getRevision(model: any, id: any, revisionCrit: any, callback: any) {
                             console.error(err);
                             return callback(err, null);
                         }
-                        callback(null, clean(object));
+                        callback(null, doCleaning ? clean(object) : object);
                     });
                 })
         });
@@ -198,13 +198,13 @@ function getRevision(model: any, id: any, revisionCrit: any, callback: any) {
     }    
 }
 
-export function getVersion(model: any, id: any, version: string, callback: any) {
-    getRevision(model, id, {ver: {$gte: parseInt(version, 10)}}, callback);
+export function getVersion(model: any, id: any, version: string, doCleaning: boolean, callback: any) {
+    getRevision(model, id, {ver: {$gte: parseInt(version, 10)}}, doCleaning, callback);
 }
 
-export function getSnapshot(model: any, id: any, snapshotDt: Date, callback: any) {
+export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: boolean, callback: any) {
     const dateAsObjectId = Mongoose.Types.ObjectId(Math.floor(snapshotDt.getTime() / 1000).toString(16) + "0000000000000000");
-    getRevision(model, id, { _id: { $gte: dateAsObjectId }}, callback);
+    getRevision(model, id, { _id: { $gte: dateAsObjectId }}, doCleaning, callback);
 }
 
 export function auditAdHocEvent(user: string, description: string, details: any) {
