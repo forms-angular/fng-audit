@@ -167,20 +167,21 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
     }
 }
 
-export function getVersion(model: any, id: any, version: string, callback: any) {
+function getRevision(model: any, id: any, revisionCrit: any, callback: any) {
     if (Audit) {
         model.findOne({_id: id}, function (err: any, latest: any) {
             if (err) {
                 return callback(err, null);
             }
-            Audit.find({c: model.modelName, cId: id, ver: {$gte: parseInt(version, 10)}},
+            const criteria = { $and: [ { c: model.modelName }, { cId: id }, revisionCrit ] };
+            Audit.find(criteria,
                 {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
                     if (err) {
                         console.error(err);
                         return callback(err, null);
                     }
                     let object = latest ? latest.toObject() : {_id: Mongoose.Types.ObjectId(id)};
-                    async.each(histories, function (history: any, eachCallback) {
+                    async.each(histories, function (history: any, eachCallback: () => void) {
                         (<any>jsondiffpatch).unpatch(object, history.chg);
                         eachCallback();
                     }, function (err) {
@@ -194,7 +195,16 @@ export function getVersion(model: any, id: any, version: string, callback: any) 
         });
     } else {
         callback(null);
-    }
+    }    
+}
+
+export function getVersion(model: any, id: any, version: string, callback: any) {
+    getRevision(model, id, {ver: {$gte: parseInt(version, 10)}}, callback);
+}
+
+export function getSnapshot(model: any, id: any, snapshotDt: Date, callback: any) {
+    const dateAsObjectId = Mongoose.Types.ObjectId(Math.floor(snapshotDt.getTime() / 1000).toString(16) + "0000000000000000");
+    getRevision(model, id, { _id: { $gte: dateAsObjectId }}, callback);
 }
 
 export function auditAdHocEvent(user: string, description: string, details: any) {
