@@ -242,7 +242,7 @@ function getPseudoField(name: string, updated: any, orig?: any) {
 function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
     if (Audit) {
         let user: any = getPseudoField('user', updated, orig) || getPseudoField('_usr', updated, orig);
-        let op: any = getPseudoField('op', updated, orig);
+        let op: any = getPseudoField('op', updated, orig) || orig.$op;
         // Remove the stuff you never want to audit
         let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
         let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
