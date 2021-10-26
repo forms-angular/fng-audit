@@ -14,7 +14,7 @@
     "lodash.clonedeep": "^4.5.0"
   },
   "scripts": {
-    "test": "mocha",
+    "test": "mocha --exit",
     "build": "grunt"
   },
   "main": "./dist/server/fng-audit.js",
