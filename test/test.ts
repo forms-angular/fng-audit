@@ -6,11 +6,7 @@ let fngAudit = require("../src/server/fng-audit");
 
 let assert = chai.assert;
 
-mongoose.connect("mongodb://localhost:27017/fng_audit_test", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useFindAndModify: false,
-});
+mongoose.connect("mongodb://localhost:27017/fng_audit_test", {});
 (<any>mongoose).Promise = global.Promise;
 // mongoose.set('debug', true);
 
@@ -150,7 +146,7 @@ describe('Mongoose Plugin', function () {
 
     describe('save', function () {
 
-        let orig: any, modified: any;
+        let orig: any, modified: any, origId: string;
 
         before(function(done) {
             clearDownDB(() => {
@@ -160,6 +156,7 @@ describe('Mongoose Plugin', function () {
                         throw err
                     }
                     orig = test[0].toObject();
+                    origId = orig._id.toString();
                     test[0].set({aString: 'Update', aNumber: 2, aBoolean: true});
                     test[0].save(function (err, test2: mongoose.Document) {
                         if (err) {
@@ -189,7 +186,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('returns version 0', function(done) {
-            fngAudit.getVersion(Test, orig._id.toString(), '0',  true,function(err: any, obj: any) {
+            fngAudit.getVersion(Test, origId, '0',  true,function(err: any, obj: any) {
                 assert.isNull(err);
                 assert.deepEqual(obj, fngAudit.clean(orig));
                 done();
@@ -197,7 +194,7 @@ describe('Mongoose Plugin', function () {
         });
 
         it('returns history', function(done) {
-            fngAudit.getAuditTrail({getResource: () => true, extractTimestampFromMongoID: () => new Date()}, 'test', orig._id.toString(), null,function(err: any, obj: any) {
+            fngAudit.getAuditTrail({getResource: () => true, extractTimestampFromMongoID: () => new Date()}, 'test', origId, null,function(err: any, obj: any) {
                 assert.isNull(err);
                 assert.match(obj[0].comment, /modified /);
                 assert.match(obj[0].comment, /aBoolean/);
@@ -325,7 +322,7 @@ describe('Mongoose Plugin', function () {
                     }
                     orig = test[0].toObject();
                     delete orig.__v;
-                    test[0].remove(function (err) {
+                    test[0].remove(function (err: Error) {
                         if (err) {
                             throw err
                         }
@@ -373,7 +370,7 @@ describe('Mongoose Plugin', function () {
                         throw err
                     }
                     orig = test[0].toObject();
-                    Test.update({aString: 'New'}, function (err: any) {
+                    Test.updateOne({aString: 'New'}, function (err: any) {
                         if (err) {
                             throw err
                         }

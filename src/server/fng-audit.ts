@@ -326,7 +326,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
     if (!Audit) {
         return next();
     } else {
-        const queryObject = docUpdate;
+        const queryObject = typeof docUpdate.clone === "function" ? docUpdate.clone() : docUpdate;
         const queryOp = queryObject.op;
         queryObject.find(queryObject._conditions, function (err: any, results: any) {
             if (err) {
