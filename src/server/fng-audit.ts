@@ -180,7 +180,7 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
                         console.error(err);
                         return callback(err, null);
                     }
-                    let object = latest ? latest.toObject() : {_id: Mongoose.Types.ObjectId(id)};
+                    let object = latest ? latest.toObject() : {_id: new Mongoose.Types.ObjectId(id)};
                     async.each(histories, function (history: any, eachCallback: () => void) {
                         (<any>jsondiffpatch).unpatch(object, history.chg);
                         eachCallback();
@@ -203,7 +203,7 @@ export function getVersion(model: any, id: any, version: string, doCleaning: boo
 }
 
 export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: boolean, callback: any) {
-    const dateAsObjectId = Mongoose.Types.ObjectId(Math.floor(snapshotDt.getTime() / 1000).toString(16) + "0000000000000000");
+    const dateAsObjectId = new Mongoose.Types.ObjectId(Math.floor(snapshotDt.getTime() / 1000).toString(16) + "0000000000000000");
     getRevision(model, id, { _id: { $gte: dateAsObjectId }}, doCleaning, callback);
 }
 
