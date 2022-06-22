@@ -2,11 +2,13 @@ import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
 import {AsyncResultCallback} from "async";
+import {fngServer} from "forms-angular/dist/server";
 var cloneDeep = require('lodash.clonedeep');
 
 interface AuditOptions {
     debug?: Boolean;
     errorHandler?: (err: string) => void;
+    userRef?: string;   // the collection that the "user" field links to
 }
 
 interface AuditPluginOptions {
@@ -19,7 +21,7 @@ let formsAngular: any;
 let auditOptions: AuditOptions = {};
 export let Audit: any;
 
-export function controller(fng: any, processArgs: (options: any, array: Array<any>) => Array<any>, options: AuditOptions) {
+export function controller(fng: any, processArgs: (options: any, array: Array<any>) => Array<any>, options: AuditOptions): Partial<fngServer.IFngPlugin> {
     formsAngular = fng;
     mongooseInstance = formsAngular.mongoose;
     auditOptions = options || {};
@@ -69,6 +71,18 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
             res.status(404).send(`No such resource as ${req.params.model}`);
         }
     }]));
+
+    return {
+        dependencyChecks: {
+            [options.userRef] : [{
+                resource: {
+                    resourceName: 'audit',
+                    model: Audit
+                },
+                keys: ['user']
+            }]
+        }
+    }
 }
 
 function extractPossiblyNestedPath(tree: string[], obj: any): any {
