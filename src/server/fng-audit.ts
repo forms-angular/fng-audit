@@ -72,8 +72,9 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         }
     }]));
 
-    return {
-        dependencyChecks: {
+    let retVal: Partial<fngServer.IFngPlugin> = {};
+    if (options.userRef) {
+        retVal.dependencyChecks = {
             [options.userRef] : [{
                 resource: {
                     resourceName: 'audit',
@@ -83,6 +84,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
             }]
         }
     }
+    return retVal;
 }
 
 function extractPossiblyNestedPath(tree: string[], obj: any): any {
