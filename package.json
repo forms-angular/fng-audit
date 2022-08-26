@@ -34,7 +34,7 @@
     "grunt-contrib-uglify": "5.1.0",
     "grunt-legacy-log": "3.0.0",
     "mocha": "^9.2.2",
-    "mongoose": "6.2.10"
+    "mongoose": "6.4.6"
   },
   "license": "MIT",
   "authors": [
