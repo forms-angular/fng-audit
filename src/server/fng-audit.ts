@@ -189,8 +189,7 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
             if (err) {
                 return callback(err, null);
             }
-            // the updateCarerLocks exclusion in the criteria below is to work around a bug discovered (and described) in ticket #8272.
-            const criteria = { $and: [ { c: model.modelName }, { cId: id }, {chg: {$exists: true}}, {$or:[{op:{$exists:false}},{op:{$ne: 'updateCarerLocks'}}]}, revisionCrit ] };
+            const criteria = { $and: [ { c: model.modelName }, { cId: id }, {chg: {$exists: true}}, revisionCrit ] };
             Audit.find(criteria,
                 {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
                     if (err) {
@@ -277,6 +276,13 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
             stripAttribFromObject(attrib, stdOrig);
             stripAttribFromObject(attrib, stdUpdated);
         });
+        /* check for changes in subdocuments where the original appears to be empty */
+        for (const key of Object.keys(stdUpdated)) {
+            if (stdUpdated[key] && stdOrig[key] === undefined && typeof stdUpdated[key] === 'object') {
+                stdOrig[key] = {};
+            }
+        }
+
         let chg = (<any>jsondiffpatch).diff(stdOrig, stdUpdated);
         if (chg) {
             let c: string = (<any>doc.constructor).modelName;
