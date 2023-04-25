@@ -189,7 +189,8 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
             if (err) {
                 return callback(err, null);
             }
-            const criteria = { $and: [ { c: model.modelName }, { cId: id }, revisionCrit ] };
+            // the updateCarerLocks exclusion in the criteria below is to work around a bug discovered (and described) in ticket #8272.
+            const criteria = { $and: [ { c: model.modelName }, { cId: id }, {chg: {$exists: true}}, {$or:[{op:{$exists:false}},{op:{$ne: 'updateCarerLocks'}}]}, revisionCrit ] };
             Audit.find(criteria,
                 {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
                     if (err) {
@@ -198,8 +199,12 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
                     }
                     let object = latest ? latest.toObject() : {_id: new Mongoose.Types.ObjectId(id)};
                     async.each(histories, function (history: any, eachCallback: () => void) {
+                        try {
                         (<any>jsondiffpatch).unpatch(object, history.chg);
                         eachCallback();
+                        } catch (e) {
+                            callback(new Error(`While unpatching ${model.modelName} ${id} version ${history.ver}: ${e.message}`), null);
+                        }
                     }, function (err) {
                         if (err) {
                             console.error(err);
