@@ -279,8 +279,12 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
         /* check for changes in subdocuments where the original appears to be empty */
         for (const key of Object.keys(stdUpdated)) {
             if (stdUpdated[key] && stdOrig[key] === undefined && typeof stdUpdated[key] === 'object') {
-                stdOrig[key] = {};
-            }
+                if (Array.isArray(stdUpdated[key])) {
+                    stdOrig[key] = [];
+                } else {
+                    stdOrig[key] = {};
+                }
+            } 
         }
 
         let chg = (<any>jsondiffpatch).diff(stdOrig, stdUpdated);
