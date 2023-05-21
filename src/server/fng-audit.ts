@@ -514,6 +514,14 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         };
     }
 
+    schema.methods.saveNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T): Promise<T> {
+        this._noAudit = true;
+        return this.save().then(() => {
+          this._noAudit = false;
+          return this;
+        });
+    };
+
     schema.pre("findOneAndUpdate", doUpdateHandling());
 
     schema.pre("update", doUpdateHandling());
