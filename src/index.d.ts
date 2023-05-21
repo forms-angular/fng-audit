@@ -30,4 +30,5 @@ interface IItemAuditScope extends fng.IFormScope {
 
 interface IAuditedDocMethods {
   saveNoAudit<T>(this: T): Promise<T>;
+  deleteNoAudit<T>(this: T): Promise<T>;
 }

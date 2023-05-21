@@ -526,6 +526,17 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         });
     };
 
+    schema.methods.deleteNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T): Promise<T> {
+        this._noAudit = true;
+        if (this.deleteOne) {
+            return this.deleteOne();
+        } else if (this.remove) {
+            return this.remove();
+        } else {
+            throw new Error("Don't know how to delete a document with this version of Mongoose");
+        }
+    };
+
     schema.pre("findOneAndUpdate", doUpdateHandling());
 
     schema.pre("update", doUpdateHandling());
