@@ -518,9 +518,9 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         };
     }
 
-    schema.methods.saveNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T): Promise<T> {
+    schema.methods.saveNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T, options?: Mongoose.SaveOptions): Promise<T> {
         this._noAudit = true;
-        return this.save().then(() => {
+        return this.save(options).then(() => {
           this._noAudit = false;
           return this;
         });
