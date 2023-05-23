@@ -1,3 +1,5 @@
+/// <reference path="../index.d.ts" />
+
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
@@ -78,6 +80,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
             [options.userRef] : [{
                 resource: {
                     resourceName: 'audit',
+                    resourceNameLower: 'audit',
                     model: Audit
                 },
                 keys: ['user']
@@ -168,7 +171,7 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
                         } else {
                             retVal.comment = 'Audit entry';
                         }
-                        mapCallback(err, retVal);
+                        mapCallback(null, retVal);
                     }, callback);
                 })
                 .catch((err: Error) => {
@@ -215,7 +218,7 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
             })
             .catch((err: Error) => {
                 return callback(err, null);
-            }),
+            });
     } else {
         callback(null);
     }    
