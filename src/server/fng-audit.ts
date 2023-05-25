@@ -1,3 +1,5 @@
+/// <reference path="../index.d.ts" />
+
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
@@ -78,6 +80,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
             [options.userRef] : [{
                 resource: {
                     resourceName: 'audit',
+                    resourceNameLower: 'audit',
                     model: Audit
                 },
                 keys: ['user']
@@ -141,13 +144,11 @@ export function clean(obj: any, delFunc?: any): any {
 export function getAuditTrail(fng: any, modelName: string, id: string, qry: any, callback: any) {
     if (Audit) {
         if (fng.getResource(modelName)) {
-            Audit.find(Object.assign(qry || {}, {
-                c: modelName,
-                cId: id
-            })).sort({_id: -1}).exec(function (err: any, trail: Array<any>) {
-                if (err) {
-                    callback(err);
-                } else {
+            Audit
+                .find(Object.assign(qry || {}, { c: modelName, cId: id }))
+                .sort({ _id: -1 })
+                .exec()
+                .then((trail: any[]) => {
                     async.map(trail, function (changeRec: any, mapCallback: AsyncResultCallback<IChangeRecord>) {
                         let retVal: IChangeRecord = {
                             operation: changeRec.op,
@@ -170,10 +171,12 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
                         } else {
                             retVal.comment = 'Audit entry';
                         }
-                        mapCallback(err, retVal);
+                        mapCallback(null, retVal);
                     }, callback);
-                }
-            });
+                })
+                .catch((err: Error) => {
+                    callback(err);
+                });
         } else {
             callback(new Error(`No such resource as ${modelName}`));
         }
@@ -185,34 +188,37 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
 
 function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean, callback: any) {
     if (Audit) {
-        model.findOne({_id: id}, function (err: any, latest: any) {
-            if (err) {
-                return callback(err, null);
-            }
-            const criteria = { $and: [ { c: model.modelName }, { cId: id }, {chg: {$exists: true}}, revisionCrit ] };
-            Audit.find(criteria,
-                {ver: 1, chg: 1}, {sort: "-ver"}, function (err: any, histories: any) {
-                    if (err) {
+        model.findOne({_id: id})
+            .then((latest: any) => {
+                const criteria = { $and: [ { c: model.modelName }, { cId: id }, { chg: { $exists: true } }, revisionCrit ] };
+                const projection = { ver: 1, chg: 1 };
+                Audit.find(criteria, projection)
+                    .sort("-ver")
+                    .then((histories: any) => {
+                        let object = latest ? latest.toObject() : { _id: new Mongoose.Types.ObjectId(id) };
+                        async.each(histories, function (history: any, eachCallback: () => void) {
+                            try {
+                                (<any>jsondiffpatch).unpatch(object, history.chg);
+                                eachCallback();
+                            } catch (e) {
+                                callback(new Error(`While unpatching ${model.modelName} ${id} version ${history.ver}: ${e.message}`), null);
+                            }
+                        }, function (err) {
+                            if (err) {
+                                console.error(err);
+                                return callback(err, null);
+                            }
+                            callback(null, doCleaning ? clean(object) : object);
+                        });
+                    })
+                    .catch((err: Error) => {
                         console.error(err);
                         return callback(err, null);
-                    }
-                    let object = latest ? latest.toObject() : {_id: new Mongoose.Types.ObjectId(id)};
-                    async.each(histories, function (history: any, eachCallback: () => void) {
-                        try {
-                        (<any>jsondiffpatch).unpatch(object, history.chg);
-                        eachCallback();
-                        } catch (e) {
-                            callback(new Error(`While unpatching ${model.modelName} ${id} version ${history.ver}: ${e.message}`), null);
-                        }
-                    }, function (err) {
-                        if (err) {
-                            console.error(err);
-                            return callback(err, null);
-                        }
-                        callback(null, doCleaning ? clean(object) : object);
                     });
-                })
-        });
+            })
+            .catch((err: Error) => {
+                return callback(err, null);
+            });
     } else {
         callback(null);
     }    
@@ -291,33 +297,43 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
         if (chg) {
             let c: string = (<any>doc.constructor).modelName;
             let cId = doc._id;
-            Audit.findOne({
+            const criteria = {
                 c: c,
                 cId: cId,
                 ver: {$exists: true}
-            }).sort("-ver").exec(function (err: any, prevAudit: any) {
-                if (err) {
-                    return next(err);
-                }
-                let auditRec: any = {
-                    c: c,
-                    cId: cId,
-                    ver: prevAudit ? prevAudit.ver + 1 : 0,
-                    chg: chg
-                };
-                if (user) {
-                    auditRec.user = user;
-                }
-                if (op) {
-                    auditRec.op = op;
-                }
-                Audit.create(auditRec, (err: Error | null) => {
-                    if (err) {
-                        console.log(`Error creating audit object: ${err.message}`)
+            }
+            Audit.findOne(criteria)
+                .sort("-ver")
+                .exec()
+                .then((prevAudit: { ver: number }) => {
+                    let auditRec: any = {
+                        c: c,
+                        cId: cId,
+                        ver: prevAudit ? prevAudit.ver + 1 : 0,
+                        chg: chg
+                    };
+                    if (user) {
+                        auditRec.user = user;
                     }
-                    next()
+                    if (op) {
+                        auditRec.op = op;
+                    }
+                    Audit.create(auditRec)
+                        .then(() => {
+                            // nothing to do
+                        })
+                        .catch((err: Error) => {
+                            if (err) {
+                                console.log(`Error creating audit object: ${err.message}`)
+                            }
+                        })
+                        .finally(() => {
+                            next()
+                        })
+                })
+                .catch((err: Error) => {
+                    return next(err);    
                 });
-            });
         } else {
             next();
         }
@@ -359,10 +375,8 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
     } else {
         const queryObject = typeof docUpdate.clone === "function" ? docUpdate.clone() : docUpdate;
         const queryOp = queryObject.op;
-        queryObject.find(queryObject._conditions, function (err: any, results: any) {
-            if (err) {
-                return next(err);
-            } else {
+        queryObject.find(queryObject._conditions)
+            .then((results: any[]) => {
                 let original: any;
                 let updated: any;
                 async.eachSeries(results, function (currentObject: any, callback) {
@@ -420,8 +434,10 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                 }, function done() {
                     return next();
                 });
-            }
-        });
+            })
+            .catch((err: Error) => {
+                return next(err);
+            });
     }
 }
 
@@ -454,12 +470,16 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                     op: 'create',
                     user
                 };
-                Audit.create(auditRec, (err: Error | null) => {
-                    if (err) {
+                Audit.create(auditRec)
+                    .then(() => {
+                        // nothing to do
+                    })
+                    .catch((err: Error) => {
                         console.log(`Error creating audit object: ${err.message}`)
-                    }
-                    next()
-                });
+                    })
+                    .finally(() => {
+                        next()
+                    });
             } else {
                 next();
             }
@@ -467,9 +487,16 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             let that = this;
             try {
                 getHiddenFields(that.constructor.collection.collectionName, options);
-                that.constructor.findOne({_id: that._id}, function(err: any, original: any) {
-                    auditFromObject(that, original, that, options, next);
-                });
+                that.constructor.findOne({_id: that._id})
+                    .then((original: any) => {
+                        auditFromObject(that, original, that, options, next);
+                    })
+                    .catch((err: Error) => {
+                        if (auditOptions.errorHandler) {
+                            auditOptions.errorHandler(err.message);
+                        }
+                        next();
+                    })
             } catch(e) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
@@ -517,6 +544,25 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             }
         };
     }
+
+    schema.methods.saveNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T, options?: Mongoose.SaveOptions): Promise<T> {
+        this._noAudit = true;
+        return this.save(options).then(() => {
+          this._noAudit = false;
+          return this;
+        });
+    };
+
+    schema.methods.deleteNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T): Promise<T> {
+        this._noAudit = true;
+        if (this.deleteOne) {
+            return this.deleteOne();
+        } else if (this.remove) {
+            return this.remove();
+        } else {
+            throw new Error("Don't know how to delete a document with this version of Mongoose");
+        }
+    };
 
     schema.pre("findOneAndUpdate", doUpdateHandling());
 

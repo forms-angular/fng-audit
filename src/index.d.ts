@@ -27,3 +27,8 @@ interface IItemAuditScope extends fng.IFormScope {
     buildHistUrl: (lastPart: string) => string;
 
 }
+
+interface IAuditedDocMethods {
+  saveNoAudit<T>(this: T): Promise<T>;
+  deleteNoAudit<T>(this: T): Promise<T>;
+}
