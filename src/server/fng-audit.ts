@@ -557,8 +557,8 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         this._noAudit = true;
         if (this.deleteOne) {
             return this.deleteOne();
-        } else if (this.remove) {
-            return this.remove();
+        } else if ((this as any).remove) {
+            return (this as any).remove();
         } else {
             throw new Error("Don't know how to delete a document with this version of Mongoose");
         }
