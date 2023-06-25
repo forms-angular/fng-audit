@@ -94,14 +94,11 @@ describe('Mongoose Plugin', function () {
 
     let handledErr: string;
 
-    function clearDownDB(next: () => void) {
-        Promise.all([
+    async function clearDownDB() {
+        await Promise.all([
             Test.deleteMany({}),
             fngAudit.Audit.deleteMany({})
         ])
-            .then(() => {
-                next()
-            });
     }
 
     before('set up the audit plugin', function () {
@@ -130,59 +127,41 @@ describe('Mongoose Plugin', function () {
 
     describe('Error handling', function() {
 
-        it ('calls an error handler', function(done) {
-            Test.create([{aString: 'Original'}], function (err: any, test: mongoose.Document[]) {
-                if (err) {
-                    throw err
-                }
-                Test.findByIdAndUpdate(test[0]._id, {$rename:{aString:'NewVal'}}, function (err: any) {
-                    if (err) {throw err}
+        it ('calls an error handler', async function() {
+            let test: mongoose.Document[] = await Test.create([{aString: 'Original'}]);
+            await Test.findByIdAndUpdate(test[0]._id, {$rename:{aString:'NewVal'}})
+                .catch(function () {
                     assert.equal(handledErr, 'No audit trail support for $rename');
-                    done();
-                })
-            });
+                });
+            assert.equal(handledErr, 'No audit trail support for $rename');
         });
+
     });
 
     describe('save', function () {
 
         let orig: any, modified: any, origId: string;
 
-        before(function(done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    origId = orig._id.toString();
-                    test[0].set({aString: 'Update', aNumber: 2, aBoolean: true});
-                    test[0].save(function (err, test2: mongoose.Document) {
-                        if (err) {
-                            throw err
-                        }
-                        modified = test2.toObject();
-                        done();
-                    })
-                });
-            });
+        before(async function() {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            origId = orig._id.toString();
+            test[0].set({aString: 'Update', aNumber: 2, aBoolean: true});
+            let test2: mongoose.Document = await test[0].save();
+            modified = test2.toObject();
         })
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
@@ -210,42 +189,26 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-
-                orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    Test.findByIdAndUpdate(test[0]._id, {
-                        $set: {aString: 'NewVal', 'subObject.attrib': 2},
-                        $push: {strings: 'add'}
-                    }, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            await Test.findByIdAndUpdate(test[0]._id, {
+                $set: {aString: 'NewVal', 'subObject.attrib': 2},
+                $push: {strings: 'add'}
             });
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
@@ -263,38 +226,23 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    Test.findByIdAndUpdate(test[0]._id, {aString: 'NewVal'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            await Test.findByIdAndUpdate(test[0]._id, {aString: 'NewVal'})
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
@@ -304,96 +252,29 @@ describe('Mongoose Plugin', function () {
                 done();
             })
         });
-
-
-    });
-
-
-    describe('remove', function() {
-
-        let orig: any;
-
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    delete orig.__v;
-                    test[0].remove(function (err: Error) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
-        });
-
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
-        });
-
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
-        });
-
-        it('returns version 0', function(done) {
-            fngAudit.getVersion(Test, orig._id.toString(), '0', false,function(err: any, obj: any) {
-                assert.isNull(err);
-                assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
-                done();
-            })
-        });
-
     });
 
     describe('update', function() {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    Test.updateOne({aString: 'New'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            await Test.updateOne({aString: 'New'});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
@@ -410,38 +291,23 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    Test.updateOne({aString: 'New', 'subObject.attrib': 42}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1, subObject: {attrib: 1}};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            await Test.updateOne({aString: 'New', 'subObject.attrib': 42});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id})
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
@@ -458,39 +324,24 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    delete orig.__v;
-                    Test.findByIdAndRemove(test[0]._id, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            delete orig.__v;
+            await Test.findByIdAndRemove(test[0]._id);
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> =  await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
@@ -507,39 +358,24 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    delete orig.__v;
-                    Test.deleteOne({aString: 'Original'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            delete orig.__v;
+            await Test.deleteOne({aString: 'Original'});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function (done) {
@@ -555,39 +391,24 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    delete orig.__v;
-                    Test.findOneAndDelete({aString: 'Original'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let  test: mongoose.Document[] = await Test.create([orig]);
+            orig = test[0].toObject();
+            delete orig.__v;
+            await Test.findOneAndDelete({aString: 'Original'});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function (done) {
@@ -603,39 +424,24 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    delete orig.__v;
-                    Test.findOneAndRemove({aString: 'Original'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig])
+            orig = test[0].toObject();
+            delete orig.__v;
+            await Test.findOneAndRemove({aString: 'Original'});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function (done) {
@@ -651,39 +457,24 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    delete orig.__v;
-                    Test.findOneAndRemove({aString: 'Original'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig])
+            orig = test[0].toObject();
+            delete orig.__v;
+            await Test.findOneAndRemove({aString: 'Original'});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function (done) {
@@ -699,38 +490,23 @@ describe('Mongoose Plugin', function () {
 
         let orig: any;
 
-        before(function (done) {
-            clearDownDB(() => {
-                orig = {aString: 'Original', aNumber: 1};
-                Test.create([orig], function (err: any, test: mongoose.Document[]) {
-                    if (err) {
-                        throw err
-                    }
-                    orig = test[0].toObject();
-                    Test.updateMany({aString: 'New'}, function (err: any) {
-                        if (err) {
-                            throw err
-                        }
-                        done();
-                    })
-                });
-            });
+        before(async function () {
+            await clearDownDB();
+            orig = {aString: 'Original', aNumber: 1};
+            let test: mongoose.Document[] = await Test.create([orig])
+            orig = test[0].toObject();
+            await Test.updateMany({aString: 'New'});
         });
 
-        it('creates an audit record', function (done) {
-            fngAudit.Audit.countDocuments({}, function (err: any, count: number) {
-                assert.isNull(err);
-                assert.equal(count, 1);
-                done();
-            });
+        it('creates an audit record', async function () {
+            let count = await fngAudit.Audit.countDocuments({});
+            assert.equal(count, 1);
         });
 
-        it('records changes in audit record', function (done) {
-            fngAudit.Audit.find({c: 'test', cId: orig._id}, function (err: any, auditRecs: Array<any>) {
-                assert.equal(auditRecs.length, 1);
-                assert.exists(auditRecs[0].chg);
-                done();
-            });
+        it('records changes in audit record', async function () {
+            let auditRecs: Array<any> = await fngAudit.Audit.find({c: 'test', cId: orig._id});
+            assert.equal(auditRecs.length, 1);
+            assert.exists(auditRecs[0].chg);
         });
 
         it('returns version 0', function(done) {
