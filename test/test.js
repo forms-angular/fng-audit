@@ -40,7 +40,7 @@ var chai = require("chai");
 var mongoose = require("mongoose");
 var fngAudit = require("../src/server/fng-audit");
 var assert = chai.assert;
-mongoose.connect("mongodb://localhost:27017/fng_audit_test", {});
+mongoose.connect("mongodb://127.0.0.1:27017/fng_audit_test", {});
 mongoose.Promise = global.Promise;
 // mongoose.set('debug', true);
 var testSchema = new mongoose.Schema({
