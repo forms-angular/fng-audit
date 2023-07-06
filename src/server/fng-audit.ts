@@ -11,9 +11,11 @@ interface AuditOptions {
     debug?: Boolean;
     errorHandler?: (err: string) => void;
     userRef?: string;   // the collection that the "user" field links to
+    // Allow the calling system to add properties to the xtra property of the audit record.  Maybe IP address or something
+    addPropFunc?: (invariantAuditRec: any, doc: any, orig: any, updated:any, options: AuditPluginOptions) => any;
 }
 
-interface AuditPluginOptions {
+export interface AuditPluginOptions {
     strip?: Array<string>
     hidden?: Array<string>
 }
@@ -35,7 +37,8 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         user: {},  // Taken from _user or __usr
         op: String,  // Taken from _op - what operation is being performed?
         dets: {},
-        ver: Number
+        ver: Number,
+        xtra: {type: Mongoose.Schema.Types.Mixed},
     });
 
     const modelName = 'audit';
@@ -265,7 +268,7 @@ function getPseudoField(name: string, updated: any, orig?: any) {
     return retVal;
 }
 
-function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: any) {
+function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: (err?: Error) => void): void {
     if (Audit) {
         let user: any = getPseudoField('user', updated, orig) || getPseudoField('_usr', updated, orig);
         let op: any = getPseudoField('op', updated, orig) || orig.$op;
@@ -318,6 +321,10 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                     if (op) {
                         auditRec.op = op;
                     }
+                    if (auditOptions.addPropFunc) {
+                        const invariantAuditRec = {...auditRec};
+                        auditRec.xtra = auditOptions.addPropFunc(invariantAuditRec, doc, orig, updated, options);
+                    }
                     Audit.create(auditRec)
                         .then(() => {
                             // nothing to do
@@ -369,7 +376,7 @@ function assignPossiblyNested(dest: any, src: any, attrib: string) {
     }
 }
 
-function auditFromUpdate(docUpdate: any, options: any, next: any) {
+function auditFromUpdate(docUpdate: Mongoose.model.Query, options: any, next: any) {
     if (!Audit) {
         return next();
     } else {
