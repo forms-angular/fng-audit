@@ -513,7 +513,14 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         }
     });
 
-    schema.pre("remove", function(next: any) {
+    // prior to mongoose 7, pre("remove") was used to intercept deleted documents.  in mongoose 7, remove() no longer
+    // exists, and instead, deleteOne() is used both to delete a document that has already been retrieved from the
+    // collection (i.e., doc.deleteOne()) and to delete a single document using a query (i.e., model.deleteOne({criteria})).
+    // to distinguish between these two cases in middleware (because obviously one has a document, and the other
+    // just the query conditions), we need to specify here whether we're dealing with the document case, the
+    // query case, or both.
+    // the document case is dealt with here, the query case, below (see schema.pre("deleteOne", ...) again, later)
+    schema.pre("deleteOne", { document: true, query: false }, function(next: any) {
         if (this._noAudit || !Audit) {
             next()
         } else {
@@ -581,7 +588,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
 
     schema.pre("findOneAndRemove", doUpdateHandling());
 
-    schema.pre("deleteOne", doUpdateHandling());
+    schema.pre("deleteOne", { document: false, query: true }, doUpdateHandling());
 
     schema.pre("findOneAndDelete", doUpdateHandling());
 
