@@ -236,7 +236,7 @@ export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: b
     getRevision(model, id, { _id: { $gte: dateAsObjectId }}, doCleaning, callback);
 }
 
-export function auditAdHocEvent(user: string, description: string, details: any) {
+export async function auditAdHocEvent(user: string, description: string, details: any) {
     function cleanKeys( obj: any) {
         if (typeof obj === "object") {
             Object.keys(obj).forEach(k => {
@@ -252,7 +252,12 @@ export function auditAdHocEvent(user: string, description: string, details: any)
 
     const copyDets = cloneDeep(details);
     cleanKeys(copyDets);    // Make sure mongoose doesn't barf on composite keys by putting quotes round them
-    return Audit.create({user, op: description, dets: copyDets})
+    let auditRec = {user, op: description, dets: copyDets};
+    let xtra = await auditOptions.addPropFunc(auditRec, null, null, null, {});
+    if (xtra) {
+        (auditRec as any).xtra = xtra;
+    }
+    return Audit.create(auditRec);
 }
 
 function getPseudoField(name: string, updated: any, orig?: any) {
@@ -308,7 +313,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
             Audit.findOne(criteria)
                 .sort("-ver")
                 .exec()
-                .then((prevAudit: { ver: number }) => {
+                .then(async (prevAudit: { ver: number }) => {
                     let auditRec: any = {
                         c: c,
                         cId: cId,
@@ -323,7 +328,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                     }
                     if (auditOptions.addPropFunc) {
                         const invariantAuditRec = {...auditRec};
-                        auditRec.xtra = auditOptions.addPropFunc(invariantAuditRec, doc, orig, updated, options);
+                        auditRec.xtra = await auditOptions.addPropFunc(invariantAuditRec, doc, orig, updated, options);
                     }
                     Audit.create(auditRec)
                         .then(() => {
@@ -464,7 +469,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     /*
             Document middleware.  "this" is the document
      */
-    schema.pre("save", function (next: any) {
+    schema.pre("save", async function (next: any) {
         if (this._noAudit || !Audit) {
             next();
         } else if (this.isNew) {
@@ -477,6 +482,10 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                     op: 'create',
                     user
                 };
+                let xtra = await auditOptions.addPropFunc(auditRec, this, null, null, {});
+                if (xtra) {
+                    (auditRec as any).xtra = xtra;
+                }
                 Audit.create(auditRec)
                     .then(() => {
                         // nothing to do
