@@ -253,9 +253,12 @@ export async function auditAdHocEvent(user: string, description: string, details
     const copyDets = cloneDeep(details);
     cleanKeys(copyDets);    // Make sure mongoose doesn't barf on composite keys by putting quotes round them
     let auditRec = {user, op: description, dets: copyDets};
-    let xtra = await auditOptions.addPropFunc(auditRec, null, null, null, {});
-    if (xtra) {
-        (auditRec as any).xtra = xtra;
+    let xtra;
+    if (typeof auditOptions.addPropFunc === 'function') {
+        xtra = await auditOptions.addPropFunc(auditRec, null, null, null, {});
+        if (xtra) {
+            (auditRec as any).xtra = xtra;
+        }
     }
     return Audit.create(auditRec);
 }
@@ -326,9 +329,12 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                     if (op) {
                         auditRec.op = op;
                     }
-                    if (auditOptions.addPropFunc) {
+                    if (typeof auditOptions.addPropFunc === 'function') {
                         const invariantAuditRec = {...auditRec};
-                        auditRec.xtra = await auditOptions.addPropFunc(invariantAuditRec, doc, orig, updated, options);
+                        let xtra = await auditOptions.addPropFunc(invariantAuditRec, doc, orig, updated, options);
+                        if (xtra) {
+                            auditRec.xtra = xtra;
+                        }
                     }
                     Audit.create(auditRec)
                         .then(() => {
@@ -482,9 +488,11 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                     op: 'create',
                     user
                 };
-                let xtra = await auditOptions.addPropFunc(auditRec, this, null, null, {});
-                if (xtra) {
-                    (auditRec as any).xtra = xtra;
+                if (typeof auditOptions.addPropFunc === "function") {
+                    let xtra = await auditOptions.addPropFunc(auditRec, this, null, null, {});
+                    if (xtra) {
+                        (auditRec as any).xtra = xtra;
+                    }
                 }
                 Audit.create(auditRec)
                     .then(() => {
