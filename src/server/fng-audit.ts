@@ -15,7 +15,7 @@ interface AuditOptions {
     addPropFunc?: (invariantAuditRec: any, doc: any, orig: any, updated:any, options: AuditPluginOptions) => any;
 }
 
-export interface AuditPluginOptions {
+interface AuditPluginOptions {
     strip?: Array<string>
     hidden?: Array<string>
 }
@@ -224,7 +224,7 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
             });
     } else {
         callback(null);
-    }    
+    }
 }
 
 export function getVersion(model: any, id: any, version: string, doCleaning: boolean, callback: any) {
@@ -301,7 +301,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                 } else {
                     stdOrig[key] = {};
                 }
-            } 
+            }
         }
 
         let chg = (<any>jsondiffpatch).diff(stdOrig, stdUpdated);
@@ -350,7 +350,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                         })
                 })
                 .catch((err: Error) => {
-                    return next(err);    
+                    return next(err);
                 });
         } else {
             next();
@@ -387,7 +387,7 @@ function assignPossiblyNested(dest: any, src: any, attrib: string) {
     }
 }
 
-function auditFromUpdate(docUpdate: Mongoose.model.Query, options: any, next: any) {
+function auditFromUpdate(docUpdate: any, options: any, next: any) {
     if (!Audit) {
         return next();
     } else {
@@ -475,7 +475,20 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     /*
             Document middleware.  "this" is the document
      */
-    schema.pre("save", async function (next: any) {
+    schema.pre("save", function (next: any) {
+        function doTheCreate(theAuditRec: any) {
+            Audit.create(theAuditRec)
+                .then(() => {
+                    // nothing to do
+                })
+                .catch((err: Error) => {
+                    console.log(`Error creating audit object: ${err.message}`)
+                })
+                .finally(() => {
+                    next()
+                });
+        }
+
         if (this._noAudit || !Audit) {
             next();
         } else if (this.isNew) {
@@ -489,21 +502,16 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                     user
                 };
                 if (typeof auditOptions.addPropFunc === "function") {
-                    let xtra = await auditOptions.addPropFunc(auditRec, this, null, null, {});
-                    if (xtra) {
-                        (auditRec as any).xtra = xtra;
-                    }
+                    auditOptions.addPropFunc(auditRec, this, null, null, {})
+                        .then((xtra: any) => {
+                            if (xtra) {
+                                (auditRec as any).xtra = xtra;
+                            }
+                            doTheCreate(auditRec);
+                        });
+                } else {
+                    doTheCreate(auditRec);
                 }
-                Audit.create(auditRec)
-                    .then(() => {
-                        // nothing to do
-                    })
-                    .catch((err: Error) => {
-                        console.log(`Error creating audit object: ${err.message}`)
-                    })
-                    .finally(() => {
-                        next()
-                    });
             } else {
                 next();
             }
@@ -579,8 +587,8 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     schema.methods.saveNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T, options?: Mongoose.SaveOptions): Promise<T> {
         this._noAudit = true;
         return this.save(options).then(() => {
-          this._noAudit = false;
-          return this;
+            this._noAudit = false;
+            return this;
         });
     };
 
