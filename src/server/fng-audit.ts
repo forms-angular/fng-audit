@@ -25,21 +25,23 @@ let formsAngular: any;
 let auditOptions: AuditOptions = {};
 export let Audit: any;
 
+export const auditSchemaTypeObj = {
+    c: String,   //collection
+    cId: {type: Mongoose.Schema.Types.ObjectId},
+    chg: {},
+    user: {},  // Taken from _user or __usr
+    op: String,  // Taken from _op - what operation is being performed?
+    dets: {},
+    ver: Number,
+    xtra: {type: Mongoose.Schema.Types.Mixed},
+};
+
+export const auditSchema = new Mongoose.Schema(auditSchemaTypeObj);
+
 export function controller(fng: any, processArgs: (options: any, array: Array<any>) => Array<any>, options: AuditOptions): Partial<fngServer.IFngPlugin> {
     formsAngular = fng;
     mongooseInstance = formsAngular.mongoose;
     auditOptions = options || {};
-
-    const auditSchema = new Mongoose.Schema({
-        c: String,   //collection
-        cId: {type: Mongoose.Schema.Types.ObjectId},
-        chg: {},
-        user: {},  // Taken from _user or __usr
-        op: String,  // Taken from _op - what operation is being performed?
-        dets: {},
-        ver: Number,
-        xtra: {type: Mongoose.Schema.Types.Mixed},
-    });
 
     const modelName = 'audit';
     try {
