@@ -5,6 +5,7 @@ import * as async from 'async';
 import * as Mongoose from "mongoose";
 import {AsyncResultCallback} from "async";
 import {fngServer} from "forms-angular/dist/server";
+import e = require("express");
 var cloneDeep = require('lodash.clonedeep');
 
 interface AuditOptions {
@@ -73,7 +74,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', function (req: any, res: any) {
         const resource = fng.getResource(req.params.model);
         if (resource) {
-            getVersion(resource.model, req.params.id, req.params.version, true, getCallback(res));
+            getVersion(resource.model, req.params.id, req.params.version, true, "bail", getCallback(res));
         } else {
             res.status(404).send(`No such resource as ${req.params.model}`);
         }
@@ -191,7 +192,11 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
     }
 }
 
-function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean, callback: any) {
+function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean, errorHandling: "bail" | "report", callback: any) {
+    function reportError(obj: any, e: Error) {
+        obj._errors = obj._errors || [];
+        obj._errors.push(e);
+    }
     if (Audit) {
         model.findOne({_id: id})
             .then((latest: any) => {
@@ -204,14 +209,21 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
                         async.each(histories, function (history: any, eachCallback: () => void) {
                             try {
                                 (<any>jsondiffpatch).unpatch(object, history.chg);
-                                eachCallback();
-                            } catch (e) {
-                                callback(new Error(`While unpatching ${model.modelName} ${id} version ${history.ver}: ${e.message}`), null);
+                            } catch(e) {
+                                if (errorHandling === "bail") {
+                                    return callback(new Error(`While unpatching ${model.modelName} ${id} version ${history.ver}: ${e.message}`), null);
+                                } else {
+                                    reportError(object, e);
+                                }
                             }
+                            eachCallback();
                         }, function (err) {
                             if (err) {
-                                console.error(err);
-                                return callback(err, null);
+                                if (errorHandling === "bail") {
+                                    return callback(err, null);
+                                } else {
+                                    reportError(object, err);
+                                }
                             }
                             callback(null, doCleaning ? clean(object) : object);
                         });
@@ -229,13 +241,13 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
     }
 }
 
-export function getVersion(model: any, id: any, version: string, doCleaning: boolean, callback: any) {
-    getRevision(model, id, {ver: {$gte: parseInt(version, 10)}}, doCleaning, callback);
+export function getVersion(model: any, id: any, version: string, doCleaning: boolean, errorHandling: "bail" | "report", callback: any) {
+    getRevision(model, id, {ver: {$gte: parseInt(version, 10)}}, doCleaning, errorHandling, callback);
 }
 
-export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: boolean, callback: any) {
+export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: boolean, errorHandling: "bail" | "report", callback: any) {
     const dateAsObjectId = new Mongoose.Types.ObjectId(Math.floor(snapshotDt.getTime() / 1000).toString(16) + "0000000000000000");
-    getRevision(model, id, { _id: { $gte: dateAsObjectId }}, doCleaning, callback);
+    getRevision(model, id, { _id: { $gte: dateAsObjectId }}, doCleaning, errorHandling, callback);
 }
 
 export async function auditAdHocEvent(user: string, description: string, details: any) {
