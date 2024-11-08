@@ -484,7 +484,13 @@ function getHiddenFields(collectionName: string, options: AuditPluginOptions) {
 }
 
 export function getUpdatesSince(modelName: string, id: Mongoose.Types.ObjectId, since: Date) : Promise<AuditObj[]> {
-    return Audit.find({c: modelName, cId: id, ver: {$exists: true}, _id:{$gt: new Mongoose.Types.ObjectId(Math.floor(since.getTime() / 1000).toString(16) + "0000000000000000")}}).lean();
+    let crit: any = {c: modelName, cId: id, ver: {$exists: true}};
+    if (since) {
+        crit._id = {$gt: new Mongoose.Types.ObjectId(Math.floor(since.getTime() / 1000).toString(16) + "0000000000000000")};
+        return Audit.find(crit).lean();
+    } else {
+        return Audit.find(crit).sort({_id: -1}).limit(1).lean();
+    }
 }
 
 export function plugin(schema: any, options: AuditPluginOptions) {
