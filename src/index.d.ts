@@ -8,6 +8,7 @@ type AuditObj = {
   op?: string; // Operation
   dets?: any; // any details tha don't fit elsewhere
   ver: number;
+  xtra?: any;
 };
 
 type IChangeRecord = {

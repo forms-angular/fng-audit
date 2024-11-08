@@ -5,7 +5,6 @@ import * as async from 'async';
 import * as Mongoose from "mongoose";
 import {AsyncResultCallback} from "async";
 import {fngServer} from "forms-angular/dist/server";
-import e = require("express");
 var cloneDeep = require('lodash.clonedeep');
 
 interface AuditOptions {
@@ -26,6 +25,9 @@ let formsAngular: any;
 let auditOptions: AuditOptions = {};
 export let Audit: any;
 
+export interface IAuditModel
+    extends Mongoose.Model<AuditObj> {}
+
 export const auditSchemaTypeObj = {
     c: String,   //collection
     cId: {type: Mongoose.Schema.Types.ObjectId},
@@ -37,7 +39,7 @@ export const auditSchemaTypeObj = {
     xtra: {type: Mongoose.Schema.Types.Mixed},
 };
 
-export const auditSchema = new Mongoose.Schema(auditSchemaTypeObj);
+export const auditSchema = new Mongoose.Schema<AuditObj>(auditSchemaTypeObj);
 
 export function controller(fng: any, processArgs: (options: any, array: Array<any>) => Array<any>, options: AuditOptions): Partial<fngServer.IFngPlugin> {
     formsAngular = fng;
@@ -46,9 +48,9 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
 
     const modelName = 'audit';
     try {
-        Audit = mongooseInstance.model(modelName);
+        Audit = mongooseInstance.model<AuditObj, IAuditModel>(modelName);
     } catch (e) {
-        Audit = mongooseInstance.model(modelName, auditSchema);
+        Audit = mongooseInstance.model<AuditObj, IAuditModel>(modelName, auditSchema);
     }
 
     function getCallback(res: any) {
@@ -481,6 +483,10 @@ function getHiddenFields(collectionName: string, options: AuditPluginOptions) {
     }
 }
 
+export function getUpdatesSince(modelName: string, id: Mongoose.Types.ObjectId, since: Date) : Promise<AuditObj[]> {
+    return Audit.find({c: modelName, cId: id, ver: {$exists: true}, _id:{$gt: new Mongoose.Types.ObjectId(Math.floor(since.getTime() / 1000).toString(16) + "0000000000000000")}}).lean();
+}
+
 export function plugin(schema: any, options: AuditPluginOptions) {
 
     options = options || {};
@@ -632,3 +638,4 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     schema.pre("findOneAndDelete", doUpdateHandling());
 
 }
+
