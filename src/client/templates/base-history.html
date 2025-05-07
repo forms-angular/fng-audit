@@ -10,14 +10,14 @@
         <div ng-class="css('rowFluid')">
             <a ng-repeat="change in changes" ng-href="{{buildHistUrl(change.url)}}">
                 <div class="list-item">
-                    <div ng-class="css('span',12)">{{ change.changedAt | date : 'yy-MM-dd HH:mm:ss' }} UTC <span ng-if="change.chg" title="{{ change.chg | json}}"> &lt;changes&gt; </span> &nbsp; {{ change.comment }} &nbsp;{{ change.userDesc || (change.user ? (' User: ' + change.user) : '' ) }}</div>
+                    <div ng-class="css('span',12)">{{ change.changedAt | date : 'yy-MM-dd HH:mm:ss' }} <span ng-if="change.chg" title="{{ change.chg | json}}"> &lt;changes&gt; </span> &nbsp; {{ change.comment }} &nbsp;{{ change.userDesc || (change.user ? (' User: ' + change.user) : '' ) }}</div>
                 </div>
             </a>
         </div>
         <div ng-class="css('rowFluid')" ng-show="inferCreate">
             <a ng-href="{{buildHistUrl('version/0')}}">
                 <div class="list-item">
-                    <div ng-class="css('span',12)">{{ createDate | date : 'yy-MM-dd HH:mm:ss' }} UTC created</div>
+                    <div ng-class="css('span',12)">{{ createDate | date : 'yy-MM-dd HH:mm:ss' }} created</div>
                 </div>
             </a>
         </div>
