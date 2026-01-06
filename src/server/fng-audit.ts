@@ -3,16 +3,16 @@
 import * as jsondiffpatch from 'jsondiffpatch';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
-import {AsyncResultCallback} from "async";
-import {fngServer} from "forms-angular/dist/server";
-var cloneDeep = require('lodash.clonedeep');
+import { AsyncResultCallback } from "async";
+import { fngServer } from "forms-angular/dist/server/index.js";
+import cloneDeep from 'lodash.clonedeep';
 
 interface AuditOptions {
     debug?: Boolean;
     errorHandler?: (err: string) => void;
     userRef?: string;   // the collection that the "user" field links to
     // Allow the calling system to add properties to the xtra property of the audit record.  Maybe IP address or something
-    addPropFunc?: (invariantAuditRec: any, doc: any, orig: any, updated:any, options: AuditPluginOptions) => any;
+    addPropFunc?: (invariantAuditRec: any, doc: any, orig: any, updated: any, options: AuditPluginOptions) => any;
 }
 
 interface AuditPluginOptions {
@@ -26,17 +26,17 @@ let auditOptions: AuditOptions = {};
 export let Audit: any;
 
 export interface IAuditModel
-    extends Mongoose.Model<AuditObj> {}
+    extends Mongoose.Model<AuditObj> { }
 
 export const auditSchemaTypeObj = {
     c: String,   //collection
-    cId: {type: Mongoose.Schema.Types.ObjectId},
+    cId: { type: Mongoose.Schema.Types.ObjectId },
     chg: {},
     user: {},  // Taken from _user or __usr
     op: String,  // Taken from _op - what operation is being performed?
     dets: {},
     ver: Number,
-    xtra: {type: Mongoose.Schema.Types.Mixed},
+    xtra: { type: Mongoose.Schema.Types.Mixed },
 };
 
 export const auditSchema = new Mongoose.Schema<AuditObj>(auditSchemaTypeObj);
@@ -68,7 +68,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     }]));
 
     fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/changes', function (req: any, res: any) {
-        getAuditTrail(fng, req.params.model, req.params.id,  {chg: {$exists: true}}, getCallback(res))
+        getAuditTrail(fng, req.params.model, req.params.id, { chg: { $exists: true } }, getCallback(res))
     }]));
 
     // Maybe add fng.app.get('/:model/:id/snapshot/:date'...);
@@ -85,7 +85,7 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
     let retVal: Partial<fngServer.IFngPlugin> = {};
     if (options.userRef) {
         retVal.dependencyChecks = {
-            [options.userRef] : [{
+            [options.userRef]: [{
                 resource: {
                     resourceName: 'audit',
                     resourceNameLower: 'audit',
@@ -118,7 +118,7 @@ function stripAttribFromObject(attrib: string, obj: any) {
 
 export function clean(obj: any, delFunc?: any): any {
 
-    delFunc = delFunc || function(obj: any, key: any) {delete obj[key]};
+    delFunc = delFunc || function (obj: any, key: any) { delete obj[key] };
 
     for (let key in obj) {
         if (obj.hasOwnProperty(key)) {
@@ -200,9 +200,9 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
         obj._errors.push(e);
     }
     if (Audit) {
-        model.findOne({_id: id})
+        model.findOne({ _id: id })
             .then((latest: any) => {
-                const criteria = { $and: [ { c: model.modelName }, { cId: id }, { chg: { $exists: true } }, revisionCrit ] };
+                const criteria = { $and: [{ c: model.modelName }, { cId: id }, { chg: { $exists: true } }, revisionCrit] };
                 const projection = { ver: 1, chg: 1 };
                 Audit.find(criteria, projection)
                     .sort("-ver")
@@ -211,7 +211,7 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
                         async.each(histories, function (history: any, eachCallback: () => void) {
                             try {
                                 (<any>jsondiffpatch).unpatch(object, history.chg);
-                            } catch(e) {
+                            } catch (e) {
                                 if (errorHandling === "bail") {
                                     return callback(new Error(`While unpatching ${model.modelName} ${id} version ${history.ver}: ${e.message}`), null);
                                 } else {
@@ -244,20 +244,20 @@ function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean
 }
 
 export function getVersion(model: any, id: any, version: string, doCleaning: boolean, errorHandling: "bail" | "report", callback: any) {
-    getRevision(model, id, {ver: {$gte: parseInt(version, 10)}}, doCleaning, errorHandling, callback);
+    getRevision(model, id, { ver: { $gte: parseInt(version, 10) } }, doCleaning, errorHandling, callback);
 }
 
 export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: boolean, errorHandling: "bail" | "report", callback: any) {
     const dateAsObjectId = new Mongoose.Types.ObjectId(Math.floor(snapshotDt.getTime() / 1000).toString(16) + "0000000000000000");
-    getRevision(model, id, { _id: { $gte: dateAsObjectId }}, doCleaning, errorHandling, callback);
+    getRevision(model, id, { _id: { $gte: dateAsObjectId } }, doCleaning, errorHandling, callback);
 }
 
 export async function auditAdHocEvent(user: string, description: string, details: any) {
-    function cleanKeys( obj: any) {
+    function cleanKeys(obj: any) {
         if (typeof obj === "object") {
             Object.keys(obj).forEach(k => {
                 cleanKeys(obj[k]);
-                let safeKey = k.replace(/\./g,'-').replace(/^\$/, '#')
+                let safeKey = k.replace(/\./g, '-').replace(/^\$/, '#')
                 if (safeKey !== k) {
                     obj[safeKey] = obj[k];
                     delete obj[k];
@@ -268,7 +268,7 @@ export async function auditAdHocEvent(user: string, description: string, details
 
     const copyDets = cloneDeep(details);
     cleanKeys(copyDets);    // Make sure mongoose doesn't barf on composite keys by putting quotes round them
-    let auditRec = {user, op: description, dets: copyDets};
+    let auditRec = { user, op: description, dets: copyDets };
     let xtra;
     if (typeof auditOptions.addPropFunc === 'function') {
         xtra = await auditOptions.addPropFunc(auditRec, null, null, null, {});
@@ -292,7 +292,7 @@ function getPseudoField(name: string, updated: any, orig?: any) {
     return retVal;
 }
 
-function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginOptions, next: (err?: Error) => void): void {
+function auditFromObject(doc: any, orig: any, updated: any, options: AuditPluginOptions, next: (err?: Error) => void): void {
     if (Audit) {
         let user: any = getPseudoField('user', updated, orig) || getPseudoField('_usr', updated, orig);
         let op: any = getPseudoField('op', updated, orig) || orig.$op;
@@ -327,7 +327,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
             const criteria = {
                 c: c,
                 cId: cId,
-                ver: {$exists: true}
+                ver: { $exists: true }
             }
             Audit.findOne(criteria)
                 .sort("-ver")
@@ -346,7 +346,7 @@ function auditFromObject(doc: any, orig: any, updated:any, options: AuditPluginO
                         auditRec.op = op;
                     }
                     if (typeof auditOptions.addPropFunc === 'function') {
-                        const invariantAuditRec = {...auditRec};
+                        const invariantAuditRec = { ...auditRec };
                         let xtra = await auditOptions.addPropFunc(invariantAuditRec, doc, orig, updated, options);
                         if (xtra) {
                             auditRec.xtra = xtra;
@@ -483,13 +483,13 @@ function getHiddenFields(collectionName: string, options: AuditPluginOptions) {
     }
 }
 
-export function getUpdatesSince(modelName: string, id: Mongoose.Types.ObjectId, since: Date) : Promise<AuditObj[]> {
-    let crit: any = {c: modelName, cId: id, ver: {$exists: true}};
+export function getUpdatesSince(modelName: string, id: Mongoose.Types.ObjectId, since: Date): Promise<AuditObj[]> {
+    let crit: any = { c: modelName, cId: id, ver: { $exists: true } };
     if (since) {
-        crit._id = {$gt: new Mongoose.Types.ObjectId(Math.floor(since.getTime() / 1000).toString(16) + "0000000000000000")};
+        crit._id = { $gt: new Mongoose.Types.ObjectId(Math.floor(since.getTime() / 1000).toString(16) + "0000000000000000") };
         return Audit.find(crit).lean();
     } else {
-        return Audit.find(crit).sort({_id: -1}).limit(1).lean();
+        return Audit.find(crit).sort({ _id: -1 }).limit(1).lean();
     }
 }
 
@@ -545,7 +545,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
             let that = this;
             try {
                 getHiddenFields(that.constructor.collection.collectionName, options);
-                that.constructor.findOne({_id: that._id})
+                that.constructor.findOne({ _id: that._id })
                     .then((original: any) => {
                         auditFromObject(that, original, that, options, next);
                     })
@@ -555,7 +555,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                         }
                         next();
                     })
-            } catch(e) {
+            } catch (e) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
@@ -571,7 +571,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     // just the query conditions), we need to specify here whether we're dealing with the document case, the
     // query case, or both.
     // the document case is dealt with here, the query case, below (see schema.pre("deleteOne", ...) again, later)
-    schema.pre("deleteOne", { document: true, query: false }, function(next: any) {
+    schema.pre("deleteOne", { document: true, query: false }, function (next: any) {
         if (this._noAudit || !Audit) {
             next()
         } else {
@@ -579,7 +579,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 let that = this;
                 getHiddenFields(that.constructor.collection.collectionName, options);
                 auditFromObject(that, that, {}, options, next);
-            } catch(e) {
+            } catch (e) {
                 if (auditOptions.errorHandler) {
                     auditOptions.errorHandler(e.message);
                 }
@@ -610,7 +610,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         };
     }
 
-    schema.methods.saveNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T, options?: Mongoose.SaveOptions): Promise<T> {
+    schema.methods.saveNoAudit = function <T extends Mongoose.Document & { _noAudit?: boolean }>(this: T, options?: Mongoose.SaveOptions): Promise<T> {
         this._noAudit = true;
         return this.save(options).then(() => {
             this._noAudit = false;
@@ -618,7 +618,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         });
     };
 
-    schema.methods.deleteNoAudit = function<T extends Mongoose.Document & { _noAudit?: boolean }>(this: T): Promise<T> {
+    schema.methods.deleteNoAudit = function <T extends Mongoose.Document & { _noAudit?: boolean }>(this: T): Promise<T> {
         this._noAudit = true;
         if (this.deleteOne) {
             return this.deleteOne();
@@ -644,4 +644,19 @@ export function plugin(schema: any, options: AuditPluginOptions) {
     schema.pre("findOneAndDelete", doUpdateHandling());
 
 }
+
+export default {
+    get Audit() { return Audit; },
+
+    auditSchemaTypeObj,
+    auditSchema,
+    controller,
+    clean,
+    getAuditTrail,
+    getVersion,
+    getSnapshot,
+    auditAdHocEvent,
+    getUpdatesSince,
+    plugin
+};
 

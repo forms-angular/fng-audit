@@ -5,8 +5,8 @@ module.exports = function (grunt) {
   grunt.initConfig({
     concat: {
       dist: {
-        src: [ 'src/client/*.js', '<%= ngtemplates.fngAuditModule.dest %>'],
-        dest: 'dist/client/fng-audit.js'
+        src: ['src/client/*.js', '<%= ngtemplates.fngAuditModule.dest %>'],
+        dest: '.tmp/client/fng-audit.js'
       }
     },
     ngtemplates: {
@@ -28,6 +28,32 @@ module.exports = function (grunt) {
         }
       }
     },
+    replace: {
+      dist: {
+        src: ['.tmp/client/fng-audit.js'],
+        dest: '.tmp/client/fng-audit.js',
+        replacements: [{
+          from: /^\s*import\s+.*$/gm,
+          to: ''
+        }]
+      }
+    },
+    umd: {
+      all: {
+        options: {
+          src: '.tmp/client/fng-audit.js',
+          dest: 'dist/client/fng-audit.js',
+          objectToExport: 'null',
+          indent: '  ',
+          deps: {
+            'default': ['angular', 'jsondiffpatch'],
+            amd: ['angular', 'jsondiffpatch'],
+            cjs: ['angular', 'jsondiffpatch'],
+            global: ['angular', 'jsondiffpatch']
+          }
+        }
+      }
+    },
     uglify: {
       dist: {
         files: {
@@ -43,12 +69,12 @@ module.exports = function (grunt) {
           src: ['**/*.js'],
           dest: 'dist/server/'
         },
-          {
-            expand: true,
-            cwd: 'src/client/',
-            src: 'fng-audit.js.map',
-            dest: 'dist/client/'
-          }]
+        {
+          expand: true,
+          cwd: 'src/client/',
+          src: 'fng-audit.js.map',
+          dest: 'dist/client/'
+        }]
       }
     }
 
@@ -58,8 +84,10 @@ module.exports = function (grunt) {
   grunt.loadNpmTasks('grunt-contrib-uglify');
   grunt.loadNpmTasks('grunt-angular-templates');
   grunt.loadNpmTasks('grunt-contrib-copy');
+  grunt.loadNpmTasks('grunt-text-replace');
+  grunt.loadNpmTasks('grunt-umd');
 
-  grunt.registerTask('build', ['ngtemplates', 'concat', 'uglify', 'copy']);
+  grunt.registerTask('build', ['ngtemplates', 'concat', 'replace', 'umd', 'uglify', 'copy']);
   grunt.registerTask('default', ['build']);
 
 };
