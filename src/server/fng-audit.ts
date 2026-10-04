@@ -1,6 +1,6 @@
 /// <reference path="../index.d.ts" />
 
-import * as jsondiffpatch from 'jsondiffpatch';
+import * as jsondiffpatch from 'jsondiffpatch/with-text-diffs';
 import * as async from 'async';
 import * as Mongoose from "mongoose";
 import { AsyncResultCallback } from "async";
