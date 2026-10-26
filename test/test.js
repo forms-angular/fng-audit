@@ -58,6 +58,27 @@ try {
 catch (e) {
     Test = mongoose.model("test", testSchema);
 }
+var secureTestSchema = new mongoose.Schema({
+    name: { type: String },
+    login: {
+        username: { type: String },
+        hash: { type: String, secure: true },
+        keys: {
+            type: [new mongoose.Schema({
+                    label: { type: String },
+                    keyHash: { type: String, secure: true }
+                })]
+        }
+    }
+});
+secureTestSchema.plugin(fngAudit.plugin);
+var SecureTest;
+try {
+    SecureTest = mongoose.model("securetest");
+}
+catch (e) {
+    SecureTest = mongoose.model("securetest", secureTestSchema);
+}
 describe('Object cleaning', function () {
     it('returns a simple populated object', function () {
         var obj = { a: 1, b: 'two' };
@@ -848,6 +869,223 @@ describe('Mongoose Plugin', function () {
                 assert.isNull(err);
                 assert.deepEqual(fngAudit.clean(JSON.parse(JSON.stringify(obj))), fngAudit.clean(JSON.parse(JSON.stringify(orig))));
                 done();
+            });
+        });
+    });
+    describe('query $set of values that are falsy or objects', function () {
+        var cases = {
+            aNumber: { orig: 5, set: 0, expected: [5, 0] },
+            aBoolean: { orig: true, set: false, expected: [true, false] },
+            aString: { orig: 'old', set: '', expected: ['old', ''] },
+            aDate: { orig: new Date('2020-01-01'), set: new Date('2026-01-02'), expected: ['2020-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z'] },
+            subObject: { orig: { attrib: 1 }, set: { attrib: 2 }, expected: { attrib: [1, 2] } },
+        };
+        Object.keys(cases).forEach(function (key) {
+            it("records the new value of ".concat(key), function () {
+                return __awaiter(this, void 0, void 0, function () {
+                    var test, orig, auditRecs, obj;
+                    var _a, _b;
+                    return __generator(this, function (_c) {
+                        switch (_c.label) {
+                            case 0: return [4 /*yield*/, clearDownDB()];
+                            case 1:
+                                _c.sent();
+                                return [4 /*yield*/, Test.create([(_a = {}, _a[key] = cases[key].orig, _a)])];
+                            case 2:
+                                test = _c.sent();
+                                orig = test[0].toObject();
+                                return [4 /*yield*/, Test.updateOne({ _id: orig._id }, { $set: (_b = {}, _b[key] = cases[key].set, _b) })];
+                            case 3:
+                                _c.sent();
+                                return [4 /*yield*/, fngAudit.Audit.find({ c: 'test', cId: orig._id }).lean()];
+                            case 4:
+                                auditRecs = _c.sent();
+                                assert.equal(auditRecs.length, 1);
+                                assert.deepEqual(auditRecs[0].chg[key], cases[key].expected);
+                                return [4 /*yield*/, new Promise(function (resolve, reject) {
+                                        fngAudit.getVersion(Test, orig._id.toString(), '0', false, "bail", function (err, obj) { return err ? reject(err) : resolve(obj); });
+                                    })];
+                            case 5:
+                                obj = _c.sent();
+                                assert.deepEqual(JSON.parse(JSON.stringify(obj))[key], JSON.parse(JSON.stringify(orig))[key]);
+                                return [2 /*return*/];
+                        }
+                    });
+                });
+            });
+        });
+        it('records the new value of an array', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var test, id, auditRecs;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, clearDownDB()];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, Test.create([{ strings: ['a'] }])];
+                        case 2:
+                            test = _a.sent();
+                            id = test[0]._id;
+                            return [4 /*yield*/, Test.updateOne({ _id: id }, { $set: { strings: ['z'] } })];
+                        case 3:
+                            _a.sent();
+                            return [4 /*yield*/, fngAudit.Audit.find({ c: 'test', cId: id }).lean()];
+                        case 4:
+                            auditRecs = _a.sent();
+                            assert.include(JSON.stringify(auditRecs[0].chg), '"z"');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+    });
+    describe('secure fields', function () {
+        var id;
+        function auditText() {
+            return __awaiter(this, void 0, void 0, function () {
+                var auditRecs;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, fngAudit.Audit.find({ c: 'securetest', cId: id }).lean()];
+                        case 1:
+                            auditRecs = _a.sent();
+                            return [2 /*return*/, JSON.stringify(auditRecs.map(function (a) { return a.chg; }))];
+                    }
+                });
+            });
+        }
+        beforeEach(function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var docs;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, Promise.all([SecureTest.deleteMany({}), fngAudit.Audit.deleteMany({})])];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, SecureTest.create([{
+                                        name: 'Original',
+                                        login: { username: 'u1', hash: 'SECRET-HASH-1', keys: [{ label: 'k1', keyHash: 'SECRET-KEY-1' }] }
+                                    }])];
+                        case 2:
+                            docs = _a.sent();
+                            id = docs[0]._id;
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('are left out when a document is saved', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var doc, text;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, SecureTest.findById(id)];
+                        case 1:
+                            doc = _a.sent();
+                            doc.set({ name: 'Update', 'login.hash': 'SECRET-HASH-2' });
+                            doc.login.keys.push({ label: 'k2', keyHash: 'SECRET-KEY-2' });
+                            return [4 /*yield*/, doc.save()];
+                        case 2:
+                            _a.sent();
+                            return [4 /*yield*/, auditText()];
+                        case 3:
+                            text = _a.sent();
+                            assert.include(text, 'Update');
+                            assert.include(text, 'k2');
+                            assert.notInclude(text, 'SECRET');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('are left out of a $set', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var text;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, SecureTest.findByIdAndUpdate(id, { $set: { name: 'Update', 'login.hash': 'SECRET-HASH-2' } })];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, auditText()];
+                        case 2:
+                            text = _a.sent();
+                            assert.include(text, 'Update');
+                            assert.notInclude(text, 'SECRET');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('are left out of a $push', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var text;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, SecureTest.updateOne({ _id: id }, { $push: { 'login.keys': { label: 'k2', keyHash: 'SECRET-KEY-2' } } })];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, auditText()];
+                        case 2:
+                            text = _a.sent();
+                            assert.include(text, 'k2');
+                            assert.notInclude(text, 'SECRET');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('are left out of a positional $set', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var text;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, SecureTest.updateOne({ _id: id }, { $set: { 'login.keys.0.keyHash': 'SECRET-KEY-2', 'login.keys.0.label': 'k1b' } })];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, auditText()];
+                        case 2:
+                            text = _a.sent();
+                            assert.include(text, 'k1b');
+                            assert.notInclude(text, 'SECRET');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('are left out when a document is deleted', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var text;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, SecureTest.deleteOne({ _id: id })];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, auditText()];
+                        case 2:
+                            text = _a.sent();
+                            assert.include(text, 'Original');
+                            assert.notInclude(text, 'SECRET');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('are left out when a subdocument is removed', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var text;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, SecureTest.findByIdAndUpdate(id, { $set: { login: { username: 'u2' } } })];
+                        case 1:
+                            _a.sent();
+                            return [4 /*yield*/, auditText()];
+                        case 2:
+                            text = _a.sent();
+                            assert.include(text, 'u2');
+                            assert.notInclude(text, 'SECRET');
+                            return [2 /*return*/];
+                    }
+                });
             });
         });
     });

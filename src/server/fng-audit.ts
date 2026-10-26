@@ -18,6 +18,7 @@ interface AuditOptions {
 interface AuditPluginOptions {
     strip?: Array<string>
     hidden?: Array<string>
+    secure?: Array<string>  // set by the plugin: every schema path marked secure: true (password hashes etc.)
 }
 
 let mongooseInstance: Mongoose.Mongoose;
@@ -108,12 +109,43 @@ function extractPossiblyNestedPath(tree: string[], obj: any): any {
 }
 
 function stripAttribFromObject(attrib: string, obj: any) {
-    let tree = attrib.split('.');
-    let last = tree.pop();
-    obj = extractPossiblyNestedPath(tree, obj);
-    if (obj) {
-        delete obj[last]
+    stripPathFromObject(attrib.split('.'), obj);
+}
+
+// Removes the path from obj, looking inside any arrays on the way, and coping with the shapes auditFromUpdate
+// builds from update operators: keys containing dots (from $push of 'a.b') and array positions ('a.0.b', 'a.$.b')
+function stripPathFromObject(tree: string[], obj: any) {
+    if (!obj || typeof obj !== 'object') {
+        return;
     }
+    if (Array.isArray(obj)) {
+        obj.forEach(elm => stripPathFromObject(tree, elm));
+        return;
+    }
+    delete obj[tree.join('.')];
+    for (let i = 1; i < tree.length; i++) {
+        const key = tree.slice(0, i).join('.');
+        if (key in obj) {
+            stripPathFromObject(tree.slice(i), obj[key]);
+        }
+    }
+    for (const key of Object.keys(obj)) {
+        if (/^\d+$/.test(key) || key[0] === '$') {
+            stripPathFromObject(tree, obj[key]);
+        }
+    }
+}
+
+function getSecurePaths(schema: any, prefix = ''): string[] {
+    const retVal: string[] = [];
+    schema.eachPath((path: string, schemaType: any) => {
+        if (schemaType.options?.secure) {
+            retVal.push(prefix + path);
+        } else if (schemaType.schema) {
+            retVal.push(...getSecurePaths(schemaType.schema, prefix + path + '.'));
+        }
+    });
+    return retVal;
 }
 
 export function clean(obj: any, delFunc?: any): any {
@@ -300,7 +332,7 @@ function auditFromObject(doc: any, orig: any, updated: any, options: AuditPlugin
         let stdOrig = clean(JSON.parse(JSON.stringify(orig)));
         let stdUpdated = clean(JSON.parse(JSON.stringify(updated)));
         let suppressedChanges = ['updatedAt', '__v'];
-        ['strip', 'hidden'].forEach((prop) => {
+        ['strip', 'hidden', 'secure'].forEach((prop) => {
             if ((<any>options)[prop] && (<any>options)[prop].length > 0) {
                 suppressedChanges = suppressedChanges.concat((<any>options)[prop]);
             }
@@ -376,31 +408,29 @@ function auditFromObject(doc: any, orig: any, updated: any, options: AuditPlugin
     }
 }
 
-function assignPossiblyNested(dest: any, src: any, attrib: string) {
-    let srcVal;
-    let cur: any;
+// Copies the value at attrib (which may be a dotted path) in src to the same path in dest
+function copyPossiblyNested(dest: any, src: any, attrib: string) {
     let tree = attrib.split('.');
     let last = tree.pop();
-    if (typeof src !== "object") {
-        // We are assigning a value
-        srcVal = src;
-    } else {
-        // we are copying from an analogous object
-        cur = extractPossiblyNestedPath(tree, src);
-        if (cur) {
-            srcVal = cur[last]
+    let cur = extractPossiblyNestedPath(tree, src);
+    if (cur && cur[last] !== undefined) {
+        assignPossiblyNested(dest, cur[last], attrib);
+    }
+}
+
+// Sets attrib (which may be a dotted path) in dest to srcVal.  srcVal can be anything, including falsy values,
+// Dates, ObjectIds, arrays and subdocuments.
+function assignPossiblyNested(dest: any, srcVal: any, attrib: string) {
+    let cur: any = dest;
+    let tree = attrib.split('.');
+    let last = tree.pop();
+    tree.forEach(branch => {
+        if (!cur[branch]) {
+            cur[branch] = {};
         }
-    }
-    if (srcVal) {
-        cur = dest;
-        tree.forEach(branch => {
-            if (!cur[branch]) {
-                cur[branch] = {};
-            }
-            cur = cur[branch];
-        });
-        cur[last] = srcVal;
-    }
+        cur = cur[branch];
+    });
+    cur[last] = srcVal;
 }
 
 function auditFromUpdate(docUpdate: any, options: any, next: any) {
@@ -432,7 +462,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                                         if (key === '$set') {
                                             assignPossiblyNested(updated, queryObject._update.$set[attrib], attrib)
                                         }
-                                        assignPossiblyNested(original, currentObject, attrib);
+                                        copyPossiblyNested(original, currentObject, attrib);
                                     });
                                     switch (key) {
                                         case '$set':
@@ -457,7 +487,7 @@ function auditFromUpdate(docUpdate: any, options: any, next: any) {
                                     }
                                 } else {
                                     // an assignment
-                                    assignPossiblyNested(original, currentObject, key);
+                                    copyPossiblyNested(original, currentObject, key);
                                 }
                             });
                         }
@@ -497,6 +527,14 @@ export function plugin(schema: any, options: AuditPluginOptions) {
 
     options = options || {};
     options.strip = options.strip || [];
+
+    // Worked out on first use rather than now, so paths added to the schema after this plugin are included
+    function getStrippedFields(collectionName: string) {
+        getHiddenFields(collectionName, options);
+        if (!options.secure) {
+            options.secure = getSecurePaths(schema);
+        }
+    }
 
     /*
             Document middleware.  "this" is the document
@@ -544,7 +582,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         } else {
             let that = this;
             try {
-                getHiddenFields(that.constructor.collection.collectionName, options);
+                getStrippedFields(that.constructor.collection.collectionName);
                 that.constructor.findOne({ _id: that._id })
                     .then((original: any) => {
                         auditFromObject(that, original, that, options, next);
@@ -577,7 +615,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
         } else {
             try {
                 let that = this;
-                getHiddenFields(that.constructor.collection.collectionName, options);
+                getStrippedFields(that.constructor.collection.collectionName);
                 auditFromObject(that, that, {}, options, next);
             } catch (e) {
                 if (auditOptions.errorHandler) {
@@ -597,7 +635,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
                 next()
             } else {
                 try {
-                    getHiddenFields(this.mongooseCollection.collectionName, options);
+                    getStrippedFields(this.mongooseCollection.collectionName);
                     auditFromUpdate(this, options, next);
                 } catch (e) {
                     if (auditOptions.errorHandler) {
