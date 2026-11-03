@@ -286,7 +286,7 @@ export function getSnapshot(model: any, id: any, snapshotDt: Date, doCleaning: b
 
 export async function auditAdHocEvent(user: string, description: string, details: any) {
     function cleanKeys(obj: any) {
-        if (typeof obj === "object") {
+        if (obj && typeof obj === "object") {
             Object.keys(obj).forEach(k => {
                 cleanKeys(obj[k]);
                 let safeKey = k.replace(/\./g, '-').replace(/^\$/, '#')

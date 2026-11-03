@@ -191,6 +191,22 @@ describe('Mongoose Plugin', function () {
             });
         });
     });
+    describe('auditAdHocEvent', function () {
+        it('copes with null values in the details', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var rec;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, fngAudit.auditAdHocEvent('someone', 'Ad hoc', { a: null, b: { 'c.d': 1, e: null } })];
+                        case 1:
+                            rec = _a.sent();
+                            assert.deepEqual(rec.dets, { a: null, b: { 'c-d': 1, e: null } });
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+    });
     describe('save', function () {
         var orig, modified, origId;
         before(function () {

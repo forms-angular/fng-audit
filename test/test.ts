@@ -160,6 +160,15 @@ describe('Mongoose Plugin', function () {
 
     });
 
+    describe('auditAdHocEvent', function () {
+
+        it('copes with null values in the details', async function () {
+            const rec: any = await fngAudit.auditAdHocEvent('someone', 'Ad hoc', { a: null, b: { 'c.d': 1, e: null } });
+            assert.deepEqual(rec.dets, { a: null, b: { 'c-d': 1, e: null } });
+        });
+
+    });
+
     describe('save', function () {
 
         let orig: any, modified: any, origId: string;
