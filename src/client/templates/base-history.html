@@ -1,26 +1,42 @@
 <div ng-controller="FngAuditHistCtrl">
     <div ng-class="css('rowFluid')" class="page-header list-header">
         <div class="header-lhs">
-            <h1 >History for {{modelName}} {{id}}</h1>
+            <h1 >History for {{modelName}} {{ recordDesc || id }}</h1>
         </div>
     </div>
 
-    <div class="page-body list-body">
+    <div class="page-body list-body fng-audit-history">
         <error-display></error-display>
         <div ng-class="css('rowFluid')">
-            <a ng-repeat="change in changes" ng-href="{{buildHistUrl(change.url)}}">
-                <div class="list-item">
-                    <div ng-class="css('span',12)">{{ change.changedAt | date : 'yy-MM-dd HH:mm:ss' }} <span ng-if="change.chg" title="{{ change.chg | json}}"> &lt;changes&gt; </span> &nbsp; {{ change.comment }} &nbsp;{{ change.userDesc || (change.user ? (' User: ' + change.user) : '' ) }}</div>
+            <div class="list-item fng-audit-entry" ng-repeat="change in changes">
+                <div ng-class="css('span',12)">
+                    <span class="fng-audit-when">{{ change.changedAt | date : 'd MMM yyyy HH:mm:ss' }}</span>
+                    &nbsp;<span class="fng-audit-op">{{ change.details.length ? 'changed' : change.comment }}</span>
+                    &nbsp;<span class="fng-audit-user">{{ change.userDesc || (change.user ? (' User: ' + change.user) : '' ) }}</span>
+                    <a ng-if="change.chg" class="fng-audit-version" ng-href="{{buildHistUrl(change.url)}}" title="View the record as it was after this change">(version)</a>
+                    <span ng-if="change.chg && !change.details" title="{{ change.chg | json}}"> &lt;changes&gt; </span>
                 </div>
-            </a>
+                <table ng-if="change.details.length" class="table table-condensed fng-audit-changes">
+                    <thead>
+                        <tr><th>Field</th><th>Was</th><th>Now</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="d in change.details" class="fng-audit-{{ d.kind }}">
+                            <td class="fng-audit-field">{{ d.label }}</td>
+                            <td ng-if="d.kind !== 'text'" class="fng-audit-from">{{ d.kind === 'added' ? '' : formatChangeValue(d.from) }}</td>
+                            <td ng-if="d.kind !== 'text'" class="fng-audit-to">{{ d.kind === 'removed' ? '(removed)' : formatChangeValue(d.to) }}</td>
+                            <td ng-if="d.kind === 'text'" class="fng-audit-text" colspan="2"><span ng-repeat="t in d.textDiff"><del ng-if="t.op === '-'">{{ t.text }}</del><ins ng-if="t.op === '+'">{{ t.text }}</ins><span ng-if="t.op === '='">{{ t.text }}</span></span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         <div ng-class="css('rowFluid')" ng-show="inferCreate">
             <a ng-href="{{buildHistUrl('version/0')}}">
                 <div class="list-item">
-                    <div ng-class="css('span',12)">{{ createDate | date : 'yy-MM-dd HH:mm:ss' }} created</div>
+                    <div ng-class="css('span',12)">{{ createDate | date : 'd MMM yyyy HH:mm:ss' }} created</div>
                 </div>
             </a>
         </div>
     </div>
 </div>
-

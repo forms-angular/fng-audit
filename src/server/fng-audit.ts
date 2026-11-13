@@ -206,6 +206,11 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
                         if (changedFields.length > 0) {
                             retVal.comment = "modified " + changedFields.concat(changedValues).join(", ");
                             retVal.chg = changeRec.chg;
+                            try {
+                                retVal.details = describeChanges(fng.getResource(modelName)?.model?.schema, changeRec.chg);
+                            } catch (e) {
+                                // the raw chg is still there to fall back on
+                            }
                         } else if (changeRec.op) {
                             retVal.comment = changeRec.op;
                         } else {
@@ -224,6 +229,150 @@ export function getAuditTrail(fng: any, modelName: string, id: string, qry: any,
         // Probably a test
         callback();
     }
+}
+
+function titleCase(str: string): string {
+    return str
+        .replace(/(_|\.)/g, ' ')
+        .replace(/[A-Z]/g, ' $&').trim()
+        .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
+        .replace(/\s{2,}/g, ' ');
+}
+
+// form.hidden isn't a reason to leave a field out: apps can unhide fields at run time, and the fields that are never
+// sent to the client (the resource's hide option) aren't audited in the first place
+function isConcealed(schemaType: any): boolean {
+    return !!schemaType?.options?.secure;
+}
+
+function fieldLabel(schemaType: any, seg: string): string {
+    const label = schemaType?.options?.form?.label;
+    return (typeof label === 'string' && label) ? label : titleCase(seg);
+}
+
+function isPlainObject(v: any): boolean {
+    return v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date) && !(v as any)._bsontype;
+}
+
+function refOf(schemaType: any): string | undefined {
+    const ref = schemaType?.options?.ref ?? schemaType?.caster?.options?.ref ?? schemaType?.options?.type?.[0]?.ref;
+    return typeof ref === 'string' ? ref : undefined;
+}
+
+function describeValueIn(value: any, schemaType: any, sch?: Mongoose.Schema, dotted?: string): IChangeValue {
+    if (isPlainObject(value)) {
+        const subSchema: Mongoose.Schema | undefined = schemaType?.schema;
+        // a subdocument has its own schema; a nested object's fields are paths in the parent schema
+        const lookup = (segs: string[]) => subSchema ? subSchema.path(segs.join('.')) : (sch && dotted ? sch.path([dotted, ...segs].join('.')) : undefined);
+        const fields: IChangeValue["fields"] = [];
+        const addFields = (obj: any, prefix: string[]) => {
+            for (const key of Object.keys(obj)) {
+                if (key === '_id' || key === '__v') { continue; }
+                const segs = [...prefix, key];
+                const subType: any = lookup(segs);
+                if (isConcealed(subType)) { continue; }
+                const v = obj[key];
+                if (isPlainObject(v)) {
+                    addFields(v, segs);
+                } else if (v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)) {
+                    fields.push({ label: fieldLabel(subType, key), value: v, type: subType?.instance, ref: refOf(subType) });
+                }
+            }
+        };
+        addFields(value, []);
+        return { fields };
+    }
+    return { value, type: schemaType?.instance, ref: refOf(schemaType) };
+}
+
+function decodeTextDiff(patch: string): IChangeDetail["textDiff"] {
+    const result: IChangeDetail["textDiff"] = [];
+    let hunks = 0;
+    for (const line of patch.split('\n')) {
+        if (line.startsWith('@@')) {
+            if (hunks++ > 0) { result.push({ op: '=', text: ' \u2026 ' }); }
+        } else if (line.length > 0) {
+            const op = line[0] === '-' ? '-' : line[0] === '+' ? '+' : '=';
+            let text: string;
+            try { text = decodeURI(line.slice(1)); } catch (e) { text = line.slice(1); }
+            const last = result[result.length - 1];
+            if (last && last.op === op) { last.text += text; } else { result.push({ op, text }); }
+        }
+    }
+    return result;
+}
+
+/**
+ * Turn a jsondiffpatch delta (the chg of an audit record) into a list of field-by-field changes with labels taken
+ * from the schema (form.label where there is one), so a history screen can show what changed in plain terms.
+ * Secure fields are left out.
+ */
+export function describeChanges(schema: Mongoose.Schema | undefined, chg: any): IChangeDetail[] {
+    const details: IChangeDetail[] = [];
+
+    function leaf(delta: any[], schemaType: any, label: string, path: string, sch?: Mongoose.Schema, dotted?: string) {
+        if (isConcealed(schemaType)) { return; }
+        const describeValue = (v: any, t: any) => describeValueIn(v, t, sch, dotted);
+        if (delta.length === 1) {
+            details.push({ path, label, kind: 'added', to: describeValue(delta[0], schemaType) });
+        } else if (delta.length === 2) {
+            details.push({ path, label, kind: 'changed', from: describeValue(delta[0], schemaType), to: describeValue(delta[1], schemaType) });
+        } else if (delta.length === 3 && delta[2] === 0) {
+            details.push({ path, label, kind: 'removed', from: describeValue(delta[0], schemaType) });
+        } else if (delta.length === 3 && delta[2] === 2) {
+            details.push({ path, label, kind: 'text', textDiff: decodeTextDiff(delta[0]) });
+        }
+        // delta[2] === 3 is an array move, which isn't worth showing
+    }
+
+    function walk(delta: any, sch: Mongoose.Schema | undefined, segs: string[], labelPrefix: string, pathPrefix: string) {
+        const dotted = segs.join('.');
+        const schemaType: any = dotted ? sch?.path(dotted) : undefined;
+        const seg = segs[segs.length - 1];
+        const label = labelPrefix + fieldLabel(schemaType, seg);
+        const path = pathPrefix + dotted;
+        if (Array.isArray(delta)) {
+            leaf(delta, schemaType, label, path, sch, dotted);
+        } else if (delta && typeof delta === 'object') {
+            if (delta._t === 'a') {
+                if (isConcealed(schemaType)) { return; }
+                const itemSchema: Mongoose.Schema | undefined = schemaType?.schema;
+                const itemType = schemaType?.caster ?? schemaType;
+                for (const key of Object.keys(delta)) {
+                    if (key === '_t') { continue; }
+                    const removed = key.startsWith('_');
+                    const itemNo = parseInt(removed ? key.slice(1) : key, 10) + 1;
+                    const itemLabel = `${label} #${itemNo}`;
+                    const itemPath = `${path}.${itemNo}`;
+                    const itemDelta = delta[key];
+                    if (Array.isArray(itemDelta)) {
+                        leaf(itemDelta, itemType, itemLabel, itemPath);
+                    } else if (itemSchema) {
+                        for (const subKey of Object.keys(itemDelta)) {
+                            walk(itemDelta[subKey], itemSchema, [subKey], itemLabel + ' ', itemPath + '.');
+                        }
+                    }
+                }
+            } else if (schemaType?.schema) {
+                // single nested subdocument
+                if (isConcealed(schemaType)) { return; }
+                for (const key of Object.keys(delta)) {
+                    walk(delta[key], schemaType.schema, [key], label + ' ', path + '.');
+                }
+            } else {
+                for (const key of Object.keys(delta)) {
+                    walk(delta[key], sch, [...segs, key], labelPrefix, pathPrefix);
+                }
+            }
+        }
+    }
+
+    if (chg && typeof chg === 'object') {
+        for (const key of Object.keys(chg)) {
+            walk(chg[key], schema, [key], '', '');
+        }
+    }
+    return details;
 }
 
 function getRevision(model: any, id: any, revisionCrit: any, doCleaning: boolean, errorHandling: "bail" | "report", callback: any) {
@@ -684,6 +833,7 @@ export function plugin(schema: any, options: AuditPluginOptions) {
 }
 
 export default {
+    describeChanges,
     get Audit() { return Audit; },
 
     auditSchemaTypeObj,

@@ -52,7 +52,10 @@ Add **fngAuditModule** to your app's list of services.
 
 The following client side routes are added:
 
-`/<model>/<id>/history` displays a screen showing all the audited events involving a document
+`/<model>/<id>/history` displays a screen showing all the audited events involving a document, with each change
+listed field by field (label, old value, new value).  Labels come from the schema's `form.label` (or the title-cased
+field name), referenced records are shown by their list fields, and secure fields are left out.  The server
+side of this is `describeChanges(schema, chg)`, which turns an audit record's `chg` into an array of `IChangeDetail`.
 
 `/<model>/<id>/changes` displays a screen showing all the audited changes to a document
 

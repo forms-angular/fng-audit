@@ -655,3 +655,99 @@ describe('Mongoose Plugin', function () {
     });
 
 });
+
+describe('describeChanges', function () {
+
+    const contactSchema = new mongoose.Schema({
+        contact: { type: mongoose.Schema.Types.ObjectId, ref: 'person' },
+        relationship: { type: String, form: { label: 'Relationship to Client' } },
+        pin: { type: String, secure: true }
+    } as any);
+    const schema = new mongoose.Schema({
+        client: {
+            ssId: { type: String, form: { label: 'SS Reference' } },
+            allergies: String,
+            startDate: Date
+        },
+        hiddenThing: { type: String, form: { hidden: true } },
+        contactList: [contactSchema],
+        tags: [String]
+    } as any);
+
+    it('labels a changed nested field from form.label', function () {
+        const details = fngAudit.describeChanges(schema, { client: { ssId: ['123456', '1234567'] } });
+        assert.deepEqual(details, [{
+            path: 'client.ssId', label: 'SS Reference', kind: 'changed',
+            from: { value: '123456', type: 'String', ref: undefined },
+            to: { value: '1234567', type: 'String', ref: undefined }
+        }]);
+    });
+
+    it('title-cases a field without a label and reports added and removed values', function () {
+        const details = fngAudit.describeChanges(schema, { client: { allergies: ['Penicillin'], startDate: ['2026-01-01T00:00:00.000Z', 0, 0] } });
+        assert.equal(details[0].label, 'Allergies');
+        assert.equal(details[0].kind, 'added');
+        assert.equal(details[0].to.value, 'Penicillin');
+        assert.equal(details[1].label, 'Start Date');
+        assert.equal(details[1].kind, 'removed');
+        assert.equal(details[1].from.type, 'Date');
+    });
+
+    it('leaves out secure fields but not form-hidden ones', function () {
+        assert.deepEqual(fngAudit.describeChanges(schema, { contactList: { _t: 'a', '0': { pin: ['1', '2'] } } }), []);
+        assert.equal(fngAudit.describeChanges(schema, { hiddenThing: ['a', 'b'] }).length, 1);
+    });
+
+    it('describes an added array item field by field, without secure fields', function () {
+        const details = fngAudit.describeChanges(schema, {
+            contactList: { _t: 'a', '1': [{ _id: '6b0000000000000000000001', contact: '6b0000000000000000034907', relationship: 'GP', pin: '1234' }] }
+        });
+        assert.equal(details.length, 1);
+        assert.equal(details[0].label, 'Contact List #2');
+        assert.equal(details[0].kind, 'added');
+        assert.deepEqual(details[0].to.fields, [
+            { label: 'Contact', value: '6b0000000000000000034907', type: 'ObjectId', ref: 'person' },
+            { label: 'Relationship to Client', value: 'GP', type: 'String', ref: undefined }
+        ]);
+    });
+
+    it('describes a change within an array item and a removed item', function () {
+        const details = fngAudit.describeChanges(schema, {
+            contactList: { _t: 'a', '0': { relationship: ['Son', 'Nephew'] }, '_2': [{ relationship: 'Friend' }, 0, 0], '_3': ['', 1, 3] }
+        });
+        assert.equal(details.length, 2);
+        assert.equal(details[0].label, 'Contact List #1 Relationship to Client');
+        assert.equal(details[0].path, 'contactList.1.relationship');
+        assert.equal(details[0].from.value, 'Son');
+        assert.equal(details[0].to.value, 'Nephew');
+        assert.equal(details[1].label, 'Contact List #3');
+        assert.equal(details[1].kind, 'removed');
+    });
+
+    it('describes primitive array changes', function () {
+        const details = fngAudit.describeChanges(schema, { tags: { _t: 'a', '0': ['new'], '_0': ['old', 0, 0] } });
+        assert.deepEqual(details.map((d: any) => [d.label, d.kind]), [['Tags #1', 'added'], ['Tags #1', 'removed']]);
+    });
+
+    it('decodes a long-text diff', function () {
+        const diff = '@@ -1,8 +1,9 @@\n Face \n-mask\n+gloves\n s mu\n';
+        const details = fngAudit.describeChanges(schema, { client: { allergies: [diff, 0, 2] } });
+        assert.equal(details[0].kind, 'text');
+        assert.deepEqual(details[0].textDiff, [
+            { op: '=', text: 'Face ' }, { op: '-', text: 'mask' }, { op: '+', text: 'gloves' }, { op: '=', text: 's mu' }
+        ]);
+    });
+
+    it('copes with no schema', function () {
+        const details = fngAudit.describeChanges(undefined, { someField: [1, 2] });
+        assert.equal(details[0].label, 'Some Field');
+    });
+});
+
+describe('describeChanges with nested objects', function () {
+    it('labels the fields of a removed nested object from the parent schema', function () {
+        const schema = new mongoose.Schema({ sysUserData: { contextOrgId: { type: mongoose.Schema.Types.ObjectId, ref: 'organisation', form: { label: 'Context' } } } } as any);
+        const details = fngAudit.describeChanges(schema, { sysUserData: [{ contextOrgId: '5a0329454fb44007634b987c' }, 0, 0] });
+        assert.deepEqual(details[0].from.fields, [{ label: 'Context', value: '5a0329454fb44007634b987c', type: 'ObjectId', ref: 'organisation' }]);
+    });
+});

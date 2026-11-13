@@ -22,23 +22,103 @@ import angular from "angular";
             '$rootScope',
             '$scope',
             '$location',
+            '$filter',
+            '$http',
             'RoutingService',
             'FngAuditService',
             function (
                 $rootScope: IFngAuditServiceRootScope,
                 $scope: IItemAuditScope,
                 $location: angular.ILocationService,
+                $filter: angular.IFilterService,
+                $http: angular.IHttpService,
                 RoutingService: fng.IRoutingService,
                 FngAuditService: IFngAuditService
             ) {
+                // Descriptions of referenced records, keyed by "<model>/<id>"
+                const refDescs: { [key: string]: string } = {};
+
+                function formatPrimitive(value: any, type?: string, ref?: string): string {
+                    if (value === null || value === undefined || value === '') {
+                        return '(blank)';
+                    }
+                    if (Array.isArray(value)) {
+                        return value.length === 0 ? '(blank)' : value.map((v) => formatPrimitive(v, undefined, ref)).join(', ');
+                    }
+                    if (ref && typeof value === 'string') {
+                        return refDescs[`${ref}/${value}`] || value;
+                    }
+                    if (typeof value === 'boolean') {
+                        return value ? 'Yes' : 'No';
+                    }
+                    if (type === 'Date' || (typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(value))) {
+                        return $filter('date')(value, 'd MMM yyyy HH:mm');
+                    }
+                    if (typeof value === 'object') {
+                        return JSON.stringify(value);
+                    }
+                    const str = String(value);
+                    if (/<[a-z][\s\S]*>/i.test(str)) {
+                        // html field: show the text
+                        const div = document.createElement('div');
+                        div.innerHTML = str;
+                        return (div.textContent || '').replace(/\s+/g, ' ').trim() || '(blank)';
+                    }
+                    return str;
+                }
+
+                $scope.formatChangeValue = function (val?: IChangeValue): string {
+                    if (!val) {
+                        return '';
+                    }
+                    if (val.fields) {
+                        return val.fields.map((f) => `${f.label}: ${formatPrimitive(f.value, f.type, f.ref)}`).join('; ') || '(blank)';
+                    }
+                    return formatPrimitive(val.value, val.type, val.ref);
+                };
+
+                function resolveRefs(changes: IChangeRecord[]) {
+                    const wanted = new Set<string>();
+                    const note = (value: any, ref?: string) => {
+                        if (ref) {
+                            (Array.isArray(value) ? value : [value]).forEach((v) => {
+                                if (typeof v === 'string' && /^[0-9a-f]{24}$/i.test(v)) {
+                                    wanted.add(`${ref}/${v}`);
+                                }
+                            });
+                        }
+                    };
+                    const noteVal = (val?: IChangeValue) => {
+                        if (val) {
+                            note(val.value, val.ref);
+                            (val.fields || []).forEach((f) => note(f.value, f.ref));
+                        }
+                    };
+                    changes.forEach((c) => (c.details || []).forEach((d) => { noteVal(d.from); noteVal(d.to); }));
+                    wanted.forEach((key) => {
+                        $http.get<{ list: string }>(`/api/${key}/list`).then((res) => {
+                            if (res.data && res.data.list) {
+                                refDescs[key] = res.data.list;
+                            }
+                        }, () => { /* leave the id showing */ });
+                    });
+                }
+
                 $scope.changes = [];
                 const path = $location.path();
                 angular.extend($scope, RoutingService.parsePathFunc()(path));
                 const modelAndForm = `${$scope.modelName}${$scope.formName ? `/${$scope.formName}` : ''}`;
+                $http.get<{ list: string }>(`/api/${$scope.modelName}/${$scope.id}/list`).then((res) => {
+                    if (res.data && res.data.list) {
+                        $scope.recordDesc = res.data.list;
+                    }
+                }, () => { /* keep showing the id */ });
                 $scope.createDate = new Date(parseInt($scope.id.toString().substring(0, 8), 16) * 1000);
                 FngAuditService.getHist($scope.modelName, $scope.id, path.split('/').slice(-1)[0])
                     .then(function (result: { data: IChangeRecord[]; }) {
                         $scope.changes = result.data;
+                        resolveRefs($scope.changes);
+                        $scope.$applyAsync();
                         let users: { [userId: string]: null | string } = {};
                         $scope.changes.forEach(c => {
                             if (c.user) {
