@@ -1,3 +1,14 @@
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -1190,5 +1201,314 @@ describe('describeChanges with nested objects', function () {
         var details = fngAudit.describeChanges(schema, { sysUserData: [{ contextOrgId: '5a0329454fb44007634b987c' }, 0, 0] });
         assert.deepEqual(details[0].from.fields, [{ label: 'Context', value: '5a0329454fb44007634b987c', type: 'ObjectId', ref: 'organisation' }]);
     });
+});
+describe('recordVisible and the history routes', function () {
+    var _this = this;
+    var mine = new mongoose.Types.ObjectId();
+    var theirs = new mongoose.Types.ObjectId();
+    var gone = new mongoose.Types.ObjectId();
+    var routes = {};
+    var findFunc;
+    var auditFindFunc; // undefined: the audit resource has no findFunc
+    var fng = {
+        mongoose: mongoose,
+        options: {},
+        app: { get: function (path, handler) { routes[path] = handler; } },
+        getResource: function (name) { return name === 'test' ? { resourceName: 'test', model: Test, options: {} } :
+            name === 'audit' && auditFindFunc !== undefined ? { resourceName: 'audit', model: fngAudit.Audit, options: { findFunc: function () { } } } : undefined; },
+        getResourceFromCollection: function () { return ({ resourceName: 'test', model: Test, options: {} }); },
+        extractTimestampFromMongoID: function (id) { return new Date(parseInt(id.toString().substring(0, 8), 16) * 1000); },
+        doFindFuncPromise: function (req, resource) { return __awaiter(_this, void 0, void 0, function () { return __generator(this, function (_a) {
+            return [2 /*return*/, resource.resourceName === 'audit' ? auditFindFunc : findFunc];
+        }); }); },
+    };
+    function call(path, params) {
+        return new Promise(function (resolve) {
+            var res = {
+                status: function (code) { res.code = code; return res; },
+                send: function (body) { resolve({ status: res.code, body: body }); },
+            };
+            routes[path]({ params: params }, res);
+        });
+    }
+    before(function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, id, doc;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, Promise.all([Test.deleteMany({}), fngAudit.Audit.deleteMany({})])];
+                    case 1:
+                        _b.sent();
+                        return [4 /*yield*/, Test.create([{ _id: mine, aString: 'mine' }, { _id: theirs, aString: 'theirs' }])];
+                    case 2:
+                        _b.sent();
+                        _i = 0, _a = [mine, theirs];
+                        _b.label = 3;
+                    case 3:
+                        if (!(_i < _a.length)) return [3 /*break*/, 7];
+                        id = _a[_i];
+                        return [4 /*yield*/, Test.findById(id)];
+                    case 4:
+                        doc = _b.sent();
+                        doc.set({ aString: 'changed' });
+                        return [4 /*yield*/, doc.save()];
+                    case 5:
+                        _b.sent();
+                        _b.label = 6;
+                    case 6:
+                        _i++;
+                        return [3 /*break*/, 3];
+                    case 7:
+                        fngAudit.controller(fng, function (_options, array) { return array; }, {});
+                        return [2 /*return*/];
+                }
+            });
+        });
+    });
+    beforeEach(function () {
+        findFunc = null;
+        auditFindFunc = undefined;
+    });
+    after(function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, Promise.all([Test.deleteMany({}), fngAudit.Audit.deleteMany({})])];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/];
+                }
+            });
+        });
+    });
+    it('allows any record when the resource has no findFunc', function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _a, _b, _c, _d;
+            return __generator(this, function (_e) {
+                switch (_e.label) {
+                    case 0:
+                        _b = (_a = assert).isTrue;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, theirs.toString())];
+                    case 1:
+                        _b.apply(_a, [_e.sent()]);
+                        _d = (_c = assert).isTrue;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, gone.toString())];
+                    case 2:
+                        _d.apply(_c, [_e.sent()]);
+                        return [2 /*return*/];
+                }
+            });
+        });
+    });
+    it('allows only records the findFunc matches', function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _a, _b, _c, _d, _e, _f;
+            return __generator(this, function (_g) {
+                switch (_g.label) {
+                    case 0:
+                        findFunc = { _id: mine };
+                        _b = (_a = assert).isTrue;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, mine.toString())];
+                    case 1:
+                        _b.apply(_a, [_g.sent()]);
+                        _d = (_c = assert).isFalse;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, theirs.toString())];
+                    case 2:
+                        _d.apply(_c, [_g.sent()]);
+                        _f = (_e = assert).isFalse;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, gone.toString())];
+                    case 3:
+                        _f.apply(_e, [_g.sent()]);
+                        return [2 /*return*/];
+                }
+            });
+        });
+    });
+    describe('a deleted record', function () {
+        var deleted;
+        before(function () {
+            return __awaiter(this, void 0, void 0, function () {
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            deleted = new mongoose.Types.ObjectId();
+                            return [4 /*yield*/, fngAudit.Audit.create({ c: 'test', cId: deleted, op: 'delete', xtra: { org: 'orgA' } })];
+                        case 1:
+                            _a.sent();
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('is visible when the audit findFunc lets the user see its audit rows', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _a, _b;
+                return __generator(this, function (_c) {
+                    switch (_c.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            auditFindFunc = { 'xtra.org': { $in: ['orgA'] } };
+                            _b = (_a = assert).isTrue;
+                            return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString())];
+                        case 1:
+                            _b.apply(_a, [_c.sent()]);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('is visible to a user the audit findFunc does not restrict', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _a, _b;
+                return __generator(this, function (_c) {
+                    switch (_c.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            auditFindFunc = null;
+                            _b = (_a = assert).isTrue;
+                            return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString())];
+                        case 1:
+                            _b.apply(_a, [_c.sent()]);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('is hidden from a user whose audit findFunc excludes its audit rows', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _a, _b;
+                return __generator(this, function (_c) {
+                    switch (_c.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            auditFindFunc = { 'xtra.org': { $in: ['orgB'] } };
+                            _b = (_a = assert).isFalse;
+                            return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString())];
+                        case 1:
+                            _b.apply(_a, [_c.sent()]);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('is hidden when there is no audit findFunc to go by', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _a, _b;
+                return __generator(this, function (_c) {
+                    switch (_c.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            _b = (_a = assert).isFalse;
+                            return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString())];
+                        case 1:
+                            _b.apply(_a, [_c.sent()]);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it('does not open up a record that exists but is hidden', function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _a, _b;
+                return __generator(this, function (_c) {
+                    switch (_c.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            auditFindFunc = null;
+                            _b = (_a = assert).isFalse;
+                            return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, theirs.toString())];
+                        case 1:
+                            _b.apply(_a, [_c.sent()]);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+    });
+    it('is not fooled by a findFunc that uses _id itself', function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        findFunc = { _id: theirs };
+                        _b = (_a = assert).isFalse;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, mine.toString())];
+                    case 1:
+                        _b.apply(_a, [_c.sent()]);
+                        return [2 /*return*/];
+                }
+            });
+        });
+    });
+    it('refuses an id that is not an ObjectId', function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        _b = (_a = assert).isFalse;
+                        return [4 /*yield*/, fngAudit.recordVisible(fng, fng.getResource('test'), {}, 'nonsense')];
+                    case 1:
+                        _b.apply(_a, [_c.sent()]);
+                        return [2 /*return*/];
+                }
+            });
+        });
+    });
+    var _loop_1 = function (path, extra) {
+        it("".concat(path, " returns the trail of a visible record"), function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var r;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            return [4 /*yield*/, call(path, __assign({ model: 'test', id: mine.toString() }, extra))];
+                        case 1:
+                            r = _a.sent();
+                            assert.equal(r.status, 200);
+                            assert.exists(r.body);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it("".concat(path, " says 404 for a record the findFunc hides"), function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var r;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            findFunc = { _id: mine };
+                            return [4 /*yield*/, call(path, __assign({ model: 'test', id: theirs.toString() }, extra))];
+                        case 1:
+                            r = _a.sent();
+                            assert.equal(r.status, 404);
+                            assert.notInclude(JSON.stringify(r.body), 'theirs');
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+        it("".concat(path, " says 404 for an unknown model"), function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var r;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, call(path, __assign({ model: 'nothing', id: mine.toString() }, extra))];
+                        case 1:
+                            r = _a.sent();
+                            assert.equal(r.status, 404);
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        });
+    };
+    for (var _i = 0, _a = [[':model/:id/history', {}], [':model/:id/changes', {}], [':model/:id/version/:version', { version: '0' }]]; _i < _a.length; _i++) {
+        var _b = _a[_i], path = _b[0], extra = _b[1];
+        _loop_1(path, extra);
+    }
 });
 //# sourceMappingURL=test.js.map

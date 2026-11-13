@@ -751,3 +751,133 @@ describe('describeChanges with nested objects', function () {
         assert.deepEqual(details[0].from.fields, [{ label: 'Context', value: '5a0329454fb44007634b987c', type: 'ObjectId', ref: 'organisation' }]);
     });
 });
+
+describe('recordVisible and the history routes', function () {
+    const mine = new mongoose.Types.ObjectId();
+    const theirs = new mongoose.Types.ObjectId();
+    const gone = new mongoose.Types.ObjectId();
+    const routes: { [path: string]: (req: any, res: any) => void } = {};
+    let findFunc: any;
+    let auditFindFunc: any;   // undefined: the audit resource has no findFunc
+
+    const fng: any = {
+        mongoose,
+        options: {},
+        app: { get: function (path: string, handler: any) { routes[path] = handler; } },
+        getResource: (name: string) => name === 'test' ? { resourceName: 'test', model: Test, options: {} } :
+            name === 'audit' && auditFindFunc !== undefined ? { resourceName: 'audit', model: fngAudit.Audit, options: { findFunc: () => { } } } : undefined,
+        getResourceFromCollection: () => ({ resourceName: 'test', model: Test, options: {} }),
+        extractTimestampFromMongoID: (id: any) => new Date(parseInt(id.toString().substring(0, 8), 16) * 1000),
+        doFindFuncPromise: async (req: any, resource: any) => resource.resourceName === 'audit' ? auditFindFunc : findFunc,
+    };
+
+    function call(path: string, params: any): Promise<{ status: number, body: any }> {
+        return new Promise((resolve) => {
+            const res: any = {
+                status(code: number) { res.code = code; return res; },
+                send(body: any) { resolve({ status: res.code, body }); },
+            };
+            routes[path]({ params }, res);
+        });
+    }
+
+    before(async function () {
+        await Promise.all([Test.deleteMany({}), fngAudit.Audit.deleteMany({})]);
+        await Test.create([{ _id: mine, aString: 'mine' }, { _id: theirs, aString: 'theirs' }]);
+        for (const id of [mine, theirs]) {
+            const doc = await Test.findById(id);
+            doc.set({ aString: 'changed' });
+            await doc.save();
+        }
+        fngAudit.controller(fng, (_options: any, array: Array<any>) => array, {});
+    });
+
+    beforeEach(function () {
+        findFunc = null;
+        auditFindFunc = undefined;
+    });
+
+    after(async function () {
+        await Promise.all([Test.deleteMany({}), fngAudit.Audit.deleteMany({})]);
+    });
+
+    it('allows any record when the resource has no findFunc', async function () {
+        assert.isTrue(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, theirs.toString()));
+        assert.isTrue(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, gone.toString()));
+    });
+
+    it('allows only records the findFunc matches', async function () {
+        findFunc = { _id: mine };
+        assert.isTrue(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, mine.toString()));
+        assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, theirs.toString()));
+        assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, gone.toString()));
+    });
+
+    describe('a deleted record', function () {
+        let deleted: mongoose.Types.ObjectId;
+
+        before(async function () {
+            deleted = new mongoose.Types.ObjectId();
+            await fngAudit.Audit.create({ c: 'test', cId: deleted, op: 'delete', xtra: { org: 'orgA' } });
+        });
+
+        it('is visible when the audit findFunc lets the user see its audit rows', async function () {
+            findFunc = { _id: mine };
+            auditFindFunc = { 'xtra.org': { $in: ['orgA'] } };
+            assert.isTrue(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString()));
+        });
+
+        it('is visible to a user the audit findFunc does not restrict', async function () {
+            findFunc = { _id: mine };
+            auditFindFunc = null;
+            assert.isTrue(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString()));
+        });
+
+        it('is hidden from a user whose audit findFunc excludes its audit rows', async function () {
+            findFunc = { _id: mine };
+            auditFindFunc = { 'xtra.org': { $in: ['orgB'] } };
+            assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString()));
+        });
+
+        it('is hidden when there is no audit findFunc to go by', async function () {
+            findFunc = { _id: mine };
+            assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, deleted.toString()));
+        });
+
+        it('does not open up a record that exists but is hidden', async function () {
+            findFunc = { _id: mine };
+            auditFindFunc = null;
+            assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, theirs.toString()));
+        });
+    });
+
+    it('is not fooled by a findFunc that uses _id itself', async function () {
+        findFunc = { _id: theirs };
+        assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, mine.toString()));
+    });
+
+    it('refuses an id that is not an ObjectId', async function () {
+        assert.isFalse(await fngAudit.recordVisible(fng, fng.getResource('test'), {}, 'nonsense'));
+    });
+
+    for (const [path, extra] of [[':model/:id/history', {}], [':model/:id/changes', {}], [':model/:id/version/:version', { version: '0' }]] as any) {
+        it(`${path} returns the trail of a visible record`, async function () {
+            findFunc = { _id: mine };
+            const r = await call(path, { model: 'test', id: mine.toString(), ...extra });
+            assert.equal(r.status, 200);
+            assert.exists(r.body);
+        });
+
+        it(`${path} says 404 for a record the findFunc hides`, async function () {
+            findFunc = { _id: mine };
+            const r = await call(path, { model: 'test', id: theirs.toString(), ...extra });
+            assert.equal(r.status, 404);
+            assert.notInclude(JSON.stringify(r.body), 'theirs');
+        });
+
+        it(`${path} says 404 for an unknown model`, async function () {
+            const r = await call(path, { model: 'nothing', id: mine.toString(), ...extra });
+            assert.equal(r.status, 404);
+        });
+    }
+});

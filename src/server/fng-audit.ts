@@ -64,24 +64,41 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         };
     }
 
-    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', function (req: any, res: any) {
-        getAuditTrail(fng, req.params.model, req.params.id, {}, getCallback(res))
-    }]));
+    // The record's own findFunc decides who may see its history: without this check anyone who can call the API
+    // and knows a record's id could read the history (and, from /version/, the whole record) of one they cannot open
+    function guarded(handler: (resource: any, req: any, res: any) => void) {
+        return function (req: any, res: any) {
+            const resource = fng.getResource(req.params.model);
+            if (!resource) {
+                return res.status(404).send(`No such resource as ${req.params.model}`);
+            }
+            recordVisible(fng, resource, req, req.params.id)
+                .then((visible) => {
+                    if (visible) {
+                        handler(resource, req, res);
+                    } else {
+                        res.status(404).send(`No such record as ${req.params.id} in ${req.params.model}`);
+                    }
+                })
+                .catch((err: Error) => {
+                    res.status(500).send(err.message);
+                });
+        };
+    }
 
-    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/changes', function (req: any, res: any) {
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/history', guarded(function (resource: any, req: any, res: any) {
+        getAuditTrail(fng, req.params.model, req.params.id, {}, getCallback(res))
+    })]));
+
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/changes', guarded(function (resource: any, req: any, res: any) {
         getAuditTrail(fng, req.params.model, req.params.id, { chg: { $exists: true } }, getCallback(res))
-    }]));
+    })]));
 
     // Maybe add fng.app.get('/:model/:id/snapshot/:date'...);
 
-    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', function (req: any, res: any) {
-        const resource = fng.getResource(req.params.model);
-        if (resource) {
-            getVersion(resource.model, req.params.id, req.params.version, true, "bail", getCallback(res));
-        } else {
-            res.status(404).send(`No such resource as ${req.params.model}`);
-        }
-    }]));
+    fng.app.get.apply(fng.app, processArgs(fng.options, [':model/:id/version/:version', guarded(function (resource: any, req: any, res: any) {
+        getVersion(resource.model, req.params.id, req.params.version, true, "bail", getCallback(res));
+    })]));
 
     let retVal: Partial<fngServer.IFngPlugin> = {};
     if (options.userRef) {
@@ -97,6 +114,36 @@ export function controller(fng: any, processArgs: (options: any, array: Array<an
         }
     }
     return retVal;
+}
+
+/**
+ * Whether the user making the request may see the record's history, by the resource's findFunc (the same test the
+ * record's own GET route applies).  A resource with no findFunc is open to everyone who gets past the plugin's
+ * authentication, as it is for the record itself.  Otherwise the record must match the findFunc.  A record that has
+ * been deleted can't be tested, so it falls back to the audit resource's own findFunc: the history is visible if the
+ * user could see one of the record's audit rows.
+ */
+export async function recordVisible(fng: any, resource: any, req: any, id: string): Promise<boolean> {
+    if (!Mongoose.isValidObjectId(id)) {
+        return false;
+    }
+    const findFuncQuery = await fng.doFindFuncPromise(req, resource);
+    if (!findFuncQuery) {
+        return true;
+    }
+    if (await resource.model.exists({ $and: [{ _id: id }, findFuncQuery] })) {
+        return true;
+    }
+    if (await resource.model.exists({ _id: id })) {
+        // it exists, and the user may not see it
+        return false;
+    }
+    const auditResource = fng.getResource('audit');
+    if (!auditResource?.options?.findFunc) {
+        return false;
+    }
+    const auditQuery = await fng.doFindFuncPromise(req, auditResource);
+    return !!(await Audit.exists({ $and: [{ c: resource.model.modelName, cId: id }, auditQuery || {}] }));
 }
 
 function extractPossiblyNestedPath(tree: string[], obj: any): any {
@@ -841,6 +888,7 @@ export default {
     controller,
     clean,
     getAuditTrail,
+    recordVisible,
     getVersion,
     getSnapshot,
     auditAdHocEvent,
