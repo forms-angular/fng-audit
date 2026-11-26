@@ -4,6 +4,19 @@ import angular from "angular";
 
     let auditModule: any = angular.module('fngAuditModule', ['formsAngular']);
 
+    // A request that went through an http batcher can come back with no statusText or data, which left the error
+    // box showing nothing at all
+    function showError($scope: any, err: any, fallback: string): void {
+        const data = err?.data;
+        let message = typeof data === 'string' ? data : (data?.message || '');
+        if (!message) {
+            message = err?.status === 404 ? `${fallback}: it doesn't exist, or you don't have access to it` : fallback;
+        }
+        $scope.errorVisible = true;
+        $scope.alertTitle = err?.statusText || 'Error';
+        $scope.errorMessage = message;
+    }
+
     auditModule
         .config(['RoutingServiceProvider', function (RoutingServiceProvider: fng.IRoutingServiceProvider) {
             RoutingServiceProvider.addRoutes(null, [
@@ -108,14 +121,17 @@ import angular from "angular";
                 const path = $location.path();
                 angular.extend($scope, RoutingService.parsePathFunc()(path));
                 const modelAndForm = `${$scope.modelName}${$scope.formName ? `/${$scope.formName}` : ''}`;
-                $http.get<{ list: string }>(`/api/${$scope.modelName}/${$scope.id}/list`).then((res) => {
-                    if (res.data && res.data.list) {
-                        $scope.recordDesc = res.data.list;
-                    }
-                }, () => { /* keep showing the id */ });
                 $scope.createDate = new Date(parseInt($scope.id.toString().substring(0, 8), 16) * 1000);
                 FngAuditService.getHist($scope.modelName, $scope.id, path.split('/').slice(-1)[0])
                     .then(function (result: { data: IChangeRecord[]; }) {
+                        // Only describe the record once the server has agreed the user may see its history: the
+                        // list endpoint doesn't apply the resource's findFunc, so asking for it first would show
+                        // (say) the name of a client the user has no access to above the "no such record" error
+                        $http.get<{ list: string }>(`/api/${$scope.modelName}/${$scope.id}/list`).then((res) => {
+                            if (res.data && res.data.list) {
+                                $scope.recordDesc = res.data.list;
+                            }
+                        }, () => { /* keep showing the id */ });
                         $scope.changes = result.data;
                         resolveRefs($scope.changes);
                         $scope.$applyAsync();
@@ -150,9 +166,7 @@ import angular from "angular";
                                 .then(() => { $scope.inferCreate = true });
                         }
                     }, function (err: any) {
-                        $scope.errorVisible = true;
-                        $scope.alertTitle = err.statusText;
-                        $scope.errorMessage = err.data;
+                        showError($scope, err, `Cannot show the history of ${$scope.modelName} ${$scope.id}`);
                     });
 
                 $scope.buildHistUrl = function (lastPart: string): string {
@@ -186,9 +200,7 @@ import angular from "angular";
                             $scope.version = results.data;
                         }
                     }, function (err: any) {
-                        $scope.errorVisible = true;
-                        $scope.alertTitle = err.statusText;
-                        $scope.errorMessage = err.data;
+                        showError($scope, err, `Cannot show version ${$scope.tab} of ${$scope.modelName} ${$scope.id}`);
                     });
 
                 $scope.buildHistUrl = function (change: any) {
